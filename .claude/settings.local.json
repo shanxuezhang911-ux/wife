@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/centurygame/Documents/scana/scana-server -type d -not -path */build/* -not -path */.gradle/*)",
+      "Bash(./gradlew build:*)",
+      "Bash(java:*)",
+      "Bash(npm install:*)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}

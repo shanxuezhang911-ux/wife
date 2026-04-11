@@ -1,0 +1,37 @@
+server:
+  port: 8091
+
+spring:
+  application:
+    name: wife-server
+
+ai:
+  provider: online
+  online:
+    api-url: https://lumos.diandian.info/winky/openai/v1/responses
+    api-key: lumos-d3d42b4a8f6365668aabb631fac1d6356ce3b74c0275353ed0ee37d1038438842e0e1df78354e24c44d9d45424042d1e18e993a652af0475590e2070ca9b7586.98a2913ab870cdb0807dc614b8a77eb9
+    model: gpt-5.4
+    timeout: 120000
+    stream: true
+
+voice:
+  asr:
+    enabled: false
+    api-url: ""
+    api-key: ""
+  tts:
+    enabled: false
+    api-url: ""
+    api-key: ""
+    voice-id: "wife-angry"
+    speed: 1.1
+  vad:
+    enabled: false
+    silence-threshold-ms: 800
+    interrupt-enabled: true
+
+logging:
+  level:
+    com.wife.server: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

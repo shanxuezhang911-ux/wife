@@ -1,0 +1,64 @@
+{
+  "name": "婚后窒息",
+  "appid": "__UNI__WIFE0001",
+  "description": "婚后窒息语音AI",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "app-plus": {
+    "usingComponents": true,
+    "nvueStyleCompiler": "uni-app",
+    "compilerVersion": 3,
+    "splashscreen": {
+      "alwaysShowBeforeRender": true,
+      "waiting": true,
+      "autoclose": true,
+      "delay": 0
+    },
+    "modules": {
+      "Speech": {
+        "description": "语音识别与合成"
+      },
+      "Record": {
+        "description": "录音"
+      }
+    },
+    "distribute": {
+      "android": {
+        "permissions": [
+          "<uses-permission android:name=\"android.permission.RECORD_AUDIO\"/>",
+          "<uses-permission android:name=\"android.permission.INTERNET\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
+          "<uses-permission android:name=\"android.permission.MODIFY_AUDIO_SETTINGS\"/>"
+        ],
+        "minSdkVersion": 21
+      },
+      "ios": {
+        "infoPlist": {
+          "NSMicrophoneUsageDescription": "需要使用麦克风进行语音对话",
+          "NSSpeechRecognitionUsageDescription": "需要语音识别功能"
+        }
+      }
+    }
+  },
+  "quickapp": {},
+  "mp-weixin": {
+    "appid": "",
+    "setting": {
+      "urlCheck": false
+    },
+    "usingComponents": true,
+    "requiredPrivateInfos": []
+  },
+  "h5": {
+    "devServer": {
+      "port": 5173,
+      "proxy": {
+        "/api": {
+          "target": "http://localhost:8091",
+          "changeOrigin": true
+        }
+      }
+    }
+  }
+}
