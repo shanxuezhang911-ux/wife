@@ -1,14 +1,10 @@
 /**
  * 音频播放模块
- * 接收豆包返回的音频数据（OGG/Opus片段），实时播放
- * 同时提供音量级别用于可视化
- *
- * 策略：先尝试 decodeAudioData，失败则当 PCM 16bit 24kHz 播放
+ * 接收豆包返回的 PCM 16bit LE 24kHz 单声道音频，实时播放
+ * 通过 session_start 配置 audio_config.format = 'pcm' 强制返回 PCM
  */
 
-let audioQueue = []       // 音频数据缓冲队列
-let isPlaying = false
-let volumeLevel = 0       // 0-100 当前音量级别
+let volumeLevel = 0
 let volumeCallback = null
 
 // #ifdef H5
@@ -16,12 +12,14 @@ let h5AudioContext = null
 let h5GainNode = null
 let h5Analyser = null
 let h5AnimFrame = null
-let h5NextStartTime = 0   // 下一个buffer应该开始播放的时间（无缝拼接）
+let h5NextStartTime = 0
 // #endif
 
 // #ifdef APP-PLUS
 let innerAudioContext = null
 let tempFileIndex = 0
+let audioQueue = []
+let isPlayingNative = false
 // #endif
 
 /**
@@ -32,62 +30,115 @@ export function initPlayer(onVolume) {
   volumeCallback = onVolume
 
   // #ifdef H5
-  h5AudioContext = new (window.AudioContext || window.webkitAudioContext)({
-    sampleRate: 24000
-  })
-  // 浏览器策略：AudioContext 初始为 suspended，需要 resume
-  if (h5AudioContext.state === 'suspended') {
-    h5AudioContext.resume().then(() => {
-      console.log('[Player] AudioContext resumed, state=' + h5AudioContext.state)
+  if (!h5AudioContext) {
+    h5AudioContext = new (window.AudioContext || window.webkitAudioContext)({
+      sampleRate: 24000
     })
+    h5GainNode = h5AudioContext.createGain()
+    h5GainNode.gain.value = 1.2  // 整体音量+20%
+    h5Analyser = h5AudioContext.createAnalyser()
+    h5Analyser.fftSize = 256
+    h5Analyser.smoothingTimeConstant = 0.5
+    h5GainNode.connect(h5Analyser)
+    h5Analyser.connect(h5AudioContext.destination)
+    h5NextStartTime = 0
+    startVolumeMonitor()
+    console.log('[Player] AudioContext 已创建, state=' + h5AudioContext.state + ', sampleRate=' + h5AudioContext.sampleRate)
   }
-  h5GainNode = h5AudioContext.createGain()
-  h5Analyser = h5AudioContext.createAnalyser()
-  h5Analyser.fftSize = 256
-  h5Analyser.smoothingTimeConstant = 0.5
-  h5GainNode.connect(h5Analyser)
-  h5Analyser.connect(h5AudioContext.destination)
-  h5NextStartTime = 0
-  startVolumeMonitor()
-  console.log('[Player] H5播放器已初始化, sampleRate=' + h5AudioContext.sampleRate)
+
+  // 注册全局手势监听解锁音频
+  const unlock = () => {
+    if (h5AudioContext && h5AudioContext.state === 'suspended') {
+      h5AudioContext.resume().then(() => {
+        console.log('[Player] AudioContext 已通过用户手势解锁')
+      })
+    }
+    document.removeEventListener('touchstart', unlock, true)
+    document.removeEventListener('touchend', unlock, true)
+    document.removeEventListener('click', unlock, true)
+  }
+  document.addEventListener('touchstart', unlock, true)
+  document.addEventListener('touchend', unlock, true)
+  document.addEventListener('click', unlock, true)
   // #endif
 }
 
 /**
- * 收到一帧AI音频数据
- * @param {ArrayBuffer} audioData 音频数据
+ * 收到一帧 PCM 音频数据，立即播放
+ * @param {ArrayBuffer} audioData PCM 16bit LE 24kHz 单声道
  */
 export function feedAudio(audioData) {
   if (!audioData || audioData.byteLength === 0) return
 
   // #ifdef H5
-  // H5: 直接调度播放，不排队等待（实现无缝拼接）
   if (h5AudioContext) {
     if (h5AudioContext.state === 'suspended') {
       h5AudioContext.resume()
     }
-    playH5Immediate(audioData)
+    playPCM(audioData)
     return
   }
   // #endif
 
+  // #ifdef APP-PLUS
   audioQueue.push(audioData)
-  if (!isPlaying) {
-    playNext()
+  if (!isPlayingNative) {
+    playNextNative()
   }
+  // #endif
 }
 
 /**
- * 停止播放并清空队列（用于用户打断）
+ * flushSentence 保留接口兼容，PCM模式下无需累积
  */
+export function flushSentence() {
+  // PCM 逐帧播放，无需flush
+}
+
+/**
+ * 停止播放并清空队列
+ */
+/**
+ * 等待当前缓冲音频全部播完后回调
+ */
+export function waitPlaybackEnd(callback) {
+  // #ifdef H5
+  if (!h5AudioContext || h5NextStartTime <= h5AudioContext.currentTime) {
+    callback()
+    return
+  }
+  const check = () => {
+    if (!h5AudioContext || h5NextStartTime <= h5AudioContext.currentTime) {
+      callback()
+    } else {
+      setTimeout(check, 100)
+    }
+  }
+  setTimeout(check, 100)
+  return
+  // #endif
+
+  // #ifdef APP-PLUS
+  if (audioQueue.length === 0 && !isPlayingNative) {
+    callback()
+    return
+  }
+  const checkNative = () => {
+    if (audioQueue.length === 0 && !isPlayingNative) {
+      callback()
+    } else {
+      setTimeout(checkNative, 100)
+    }
+  }
+  setTimeout(checkNative, 100)
+  // #endif
+}
+
 export function stopPlayback() {
-  audioQueue = []
-  isPlaying = false
   volumeLevel = 0
 
   // #ifdef H5
   h5NextStartTime = 0
-  // 停止所有正在播放的source节点（通过断开gain来实现）
   if (h5GainNode && h5Analyser && h5AudioContext) {
     h5GainNode.disconnect()
     h5GainNode.connect(h5Analyser)
@@ -96,86 +147,49 @@ export function stopPlayback() {
   // #endif
 
   // #ifdef APP-PLUS
+  audioQueue = []
+  isPlayingNative = false
   if (innerAudioContext) {
     try { innerAudioContext.stop() } catch (e) {}
   }
   // #endif
 }
 
-/**
- * 获取当前音量级别
- */
 export function getVolume() {
   return volumeLevel
 }
 
-/**
- * 销毁播放器
- */
 export function destroyPlayer() {
   stopPlayback()
   // #ifdef H5
   if (h5AnimFrame) cancelAnimationFrame(h5AnimFrame)
   if (h5AudioContext) {
     try { h5AudioContext.close() } catch (e) {}
+    h5AudioContext = null
   }
   // #endif
 }
 
-// ==================== 内部播放逻辑 ====================
-
-function playNext() {
-  if (audioQueue.length === 0) {
-    isPlaying = false
-    volumeLevel = 0
-    return
-  }
-
-  isPlaying = true
-  const data = audioQueue.shift()
-
-  // #ifdef H5
-  playH5(data)
-  // #endif
-
-  // #ifdef APP-PLUS
-  playNative(data)
-  // #endif
-}
-
-// ==================== H5 播放 ====================
+// ==================== H5 PCM 播放 ====================
 
 // #ifdef H5
 /**
- * H5即时播放：尝试decodeAudioData，失败则当PCM 16bit 24kHz播放
- * 使用 scheduled start time 实现无缝拼接
+ * PCM 16bit LE → Float32 AudioBuffer → 无缝调度播放
  */
-function playH5Immediate(audioData) {
-  if (!h5AudioContext) return
-
-  // 先尝试 decodeAudioData（适用于完整OGG/Opus容器）
-  const dataCopy = audioData.slice(0)
-  h5AudioContext.decodeAudioData(dataCopy, (buffer) => {
-    scheduleBuffer(buffer)
-  }, () => {
-    // 解码失败 → 当 PCM 16bit LE 24kHz 单声道
-    const int16 = new Int16Array(audioData)
-    if (int16.length === 0) return
-    const float32 = new Float32Array(int16.length)
-    for (let i = 0; i < int16.length; i++) {
-      float32[i] = int16[i] / 32768
-    }
-    const buffer = h5AudioContext.createBuffer(1, float32.length, 24000)
-    buffer.getChannelData(0).set(float32)
-    scheduleBuffer(buffer)
-  })
-}
-
-/**
- * 调度AudioBuffer在正确时间播放（无缝拼接）
- */
-function scheduleBuffer(buffer) {
+function playPCM(audioData) {
   if (!h5AudioContext || !h5GainNode) return
+
+  const int16 = new Int16Array(audioData)
+  if (int16.length === 0) return
+
+  const float32 = new Float32Array(int16.length)
+  for (let i = 0; i < int16.length; i++) {
+    float32[i] = int16[i] / 32768
+  }
+
+  const buffer = h5AudioContext.createBuffer(1, float32.length, 24000)
+  buffer.getChannelData(0).set(float32)
+
   const source = h5AudioContext.createBufferSource()
   source.buffer = buffer
   source.connect(h5GainNode)
@@ -184,15 +198,6 @@ function scheduleBuffer(buffer) {
   const startAt = Math.max(now, h5NextStartTime)
   source.start(startAt)
   h5NextStartTime = startAt + buffer.duration
-
-  isPlaying = true
-  source.onended = () => {
-    // 如果没有更多buffer排队，标记停止
-    if (h5AudioContext && h5AudioContext.currentTime >= h5NextStartTime - 0.01) {
-      isPlaying = false
-      volumeLevel = 0
-    }
-  }
 }
 
 function startVolumeMonitor() {
@@ -216,62 +221,53 @@ function startVolumeMonitor() {
 // ==================== APP原生播放 ====================
 
 // #ifdef APP-PLUS
-function playNative(audioData) {
-  // 将音频数据写入临时文件再播放
-  const fileName = `_doc/tts_${tempFileIndex++}.ogg`
-  const fileWriter = plus.io.resolveLocalFileSystemURL(fileName)
+function playNextNative() {
+  if (audioQueue.length === 0) {
+    isPlayingNative = false
+    volumeLevel = 0
+    volumeCallback && volumeCallback(0)
+    return
+  }
 
-  // 简化处理：用 Base64 方式
-  const base64 = arrayBufferToBase64(audioData)
-  const filePath = plus.io.convertLocalFileSystemURL(fileName)
+  isPlayingNative = true
+  const data = audioQueue.shift()
+  const fileName = `_doc/tts_${tempFileIndex++}.pcm`
+  const base64 = arrayBufferToBase64(data)
 
   try {
-    // 写入文件
     plus.io.requestFileSystem(plus.io.PRIVATE_DOC, (fs) => {
-      fs.root.getFile(`tts_${tempFileIndex}.ogg`, { create: true }, (entry) => {
+      fs.root.getFile(`tts_${tempFileIndex}.pcm`, { create: true }, (entry) => {
         entry.createWriter((writer) => {
           writer.write(base64)
           writer.onwriteend = () => {
-            // 播放
             if (!innerAudioContext) {
               innerAudioContext = uni.createInnerAudioContext()
               innerAudioContext.onEnded(() => {
-                // 模拟音量变化
                 volumeLevel = 0
                 volumeCallback && volumeCallback(0)
-                playNext()
+                playNextNative()
               })
               innerAudioContext.onError((err) => {
                 console.error('[Player] 播放错误', err)
-                playNext()
+                playNextNative()
               })
             }
             innerAudioContext.src = entry.toURL()
             innerAudioContext.play()
-
-            // 模拟音量跳动
-            simulateVolume()
+            // 模拟音量
+            const iv = setInterval(() => {
+              if (!isPlayingNative) { clearInterval(iv); return }
+              volumeLevel = 35 + Math.random() * 55
+              volumeCallback && volumeCallback(volumeLevel)
+            }, 80)
           }
         })
       })
     })
   } catch (e) {
-    console.error('[Player] 写入音频文件失败', e)
-    playNext()
+    console.error('[Player] 写入失败', e)
+    playNextNative()
   }
-}
-
-function simulateVolume() {
-  const interval = setInterval(() => {
-    if (!isPlaying) {
-      clearInterval(interval)
-      volumeLevel = 0
-      volumeCallback && volumeCallback(0)
-      return
-    }
-    volumeLevel = 40 + Math.random() * 50
-    volumeCallback && volumeCallback(volumeLevel)
-  }, 80)
 }
 
 function arrayBufferToBase64(buffer) {

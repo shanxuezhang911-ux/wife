@@ -26,6 +26,9 @@ let sessionId = ''
 let isConnected = false
 let isSessionActive = false
 
+// 全局发送序列号（服务端对所有客户端帧统一计数，音频帧的显式sequence必须与之匹配）
+let globalSequence = 0
+
 // 当前轮次的ASR和Chat文本累积（用于日志打印）
 let currentASRText = ''
 let currentChatText = ''
@@ -40,7 +43,8 @@ let callbacks = {
   onASREnd: null,             // 用户说完了
   onChatText: null,           // 收到AI回复文本
   onTTSStart: null,           // AI开始说话
-  onTTSEnd: null,             // AI说完了
+  onTTSSentenceEnd: null,     // AI一句话说完（用于flush音频）
+  onTTSEnd: null,             // AI全部说完了
   onError: null,              // 错误
   onDisconnect: null          // 断开连接
 }
@@ -113,6 +117,7 @@ export function connect(cbs) {
 function onOpen() {
   console.log('[Doubao] WS已连接，发送StartConnection')
   isConnected = true
+  globalSequence = 0
   // 发送 StartConnection
   sendBinary(encodeTextEvent(EVENT.StartConnection, {}, null))
 }
@@ -206,6 +211,7 @@ function onBinaryMessage(data) {
 
     case SERVER_EVENT.TTSSentenceEnd:
       console.log('[TTS] 分句合成完毕')
+      callbacks.onTTSSentenceEnd && callbacks.onTTSSentenceEnd()
       break
 
     case SERVER_EVENT.TTSEnded:
@@ -273,7 +279,15 @@ function onBinaryMessage(data) {
 function startSession() {
   const payload = {
     tts: {
-      speaker: CONFIG.SPEAKER
+      speaker: CONFIG.SPEAKER,
+      speed_ratio: CONFIG.TTS_SPEED_RATIO,
+      pitch_ratio: CONFIG.TTS_PITCH_RATIO,
+      volume_ratio: CONFIG.TTS_VOLUME_RATIO,
+      audio_config: {
+        format: 'pcm_s16le',
+        sample_rate: 24000,
+        channel: 1
+      }
     },
     asr: {
       extra: {
@@ -284,6 +298,11 @@ function startSession() {
     },
     dialog: {
       character_manifest: CONFIG.CHARACTER_MANIFEST,
+      temperature: CONFIG.DIALOG_TEMPERATURE,
+      top_p: CONFIG.DIALOG_TOP_P,
+      max_tokens: CONFIG.DIALOG_MAX_TOKENS,
+      frequency_penalty: CONFIG.DIALOG_FREQUENCY_PENALTY,
+      presence_penalty: CONFIG.DIALOG_PRESENCE_PENALTY,
       extra: {
         strict_audit: false,
         model: CONFIG.MODEL_VERSION
@@ -292,6 +311,7 @@ function startSession() {
   }
 
   console.log('[发送] StartSession → model=' + CONFIG.MODEL_VERSION + ', speaker=' + CONFIG.SPEAKER)
+  console.log('[发送] TTS: speed=' + CONFIG.TTS_SPEED_RATIO + ' pitch=' + CONFIG.TTS_PITCH_RATIO)
   console.log('[发送] 人设摘要:', CONFIG.CHARACTER_MANIFEST.substring(0, 50) + '...')
   sendBinary(encodeTextEvent(EVENT.StartSession, payload, sessionId))
 }
@@ -313,11 +333,10 @@ export function sayHello(content) {
 /**
  * 发送麦克风PCM音频帧
  * @param {ArrayBuffer} pcmData PCM音频数据
- * @param {number} sequence 帧序号（从1开始递增）
  */
-export function sendAudio(pcmData, sequence) {
+export function sendAudio(pcmData) {
   if (!isSessionActive || !ws) return
-  sendBinary(encodeAudioFrame(pcmData, sequence, sessionId))
+  sendBinary(encodeAudioFrame(pcmData, globalSequence, sessionId))
 }
 
 /**
@@ -371,6 +390,7 @@ export function isActive() {
 
 function sendBinary(buffer) {
   if (!ws) return
+  globalSequence++
   try {
     // #ifdef APP-PLUS
     ws.send({ data: buffer })

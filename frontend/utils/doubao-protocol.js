@@ -260,8 +260,8 @@ export function decodeFrame(data) {
     }
   }
 
-  // session id (skip)
-  if (!isAudio && offset + 4 <= data.byteLength) {
+  // session id (skip) — 音频帧和文本帧都可能携带 session id
+  if (offset + 4 <= data.byteLength) {
     const possibleSize = view.getUint32(offset)
     if (possibleSize > 0 && possibleSize < 200 && offset + 4 + possibleSize + 4 <= data.byteLength) {
       offset += 4 + possibleSize
