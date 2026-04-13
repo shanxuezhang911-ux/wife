@@ -16,9 +16,6 @@
       "delay": 0
     },
     "modules": {
-      "Speech": {
-        "description": "语音识别与合成"
-      },
       "Record": {
         "description": "录音"
       }
@@ -52,13 +49,7 @@
   },
   "h5": {
     "devServer": {
-      "port": 5173,
-      "proxy": {
-        "/api": {
-          "target": "http://localhost:8091",
-          "changeOrigin": true
-        }
-      }
+      "port": 5173
     }
   }
 }

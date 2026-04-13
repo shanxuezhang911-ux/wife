@@ -1,8 +1,11 @@
+import Vue from 'vue'
 import App from './App'
 
-import { createSSRApp } from 'vue'
+Vue.config.productionTip = false
 
-export function createApp() {
-  const app = createSSRApp(App)
-  return { app }
-}
+App.mpType = 'app'
+
+const app = new Vue({
+  ...App
+})
+app.$mount()

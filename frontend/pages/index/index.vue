@@ -1,44 +1,46 @@
 <template>
-  <view class="container" @click="handleUserTap">
-    <!-- 顶部状态指示灯 -->
+  <view class="container" @click="handleTap">
+    <!-- 顶部状态灯 -->
     <view class="status-dot-wrapper">
-      <view class="status-dot" :class="stateClass"></view>
+      <view class="status-dot" :class="'dot-' + state"></view>
     </view>
 
-    <!-- 中央音频可视化 -->
+    <!-- 中央可视化 -->
     <view class="visualizer-area">
-      <!-- 呼吸光圈 -->
-      <view class="glow-ring" :class="stateClass"></view>
-
-      <!-- 频谱柱状图 -->
+      <view class="glow-ring" :class="'ring-' + state"></view>
       <view class="bars-container">
         <view
           v-for="(bar, i) in bars"
           :key="i"
           class="bar"
-          :class="stateClass"
-          :style="{ height: bar.height + 'rpx', transitionDuration: bar.speed + 'ms' }"
+          :class="'bar-' + state"
+          :style="{ height: bar.h + 'rpx', transitionDuration: bar.sp + 'ms' }"
         ></view>
       </view>
-
-      <!-- 中心圆 -->
-      <view class="center-circle" :class="stateClass">
-        <view class="inner-pulse" :class="stateClass"></view>
+      <view class="center-circle" :class="'circle-' + state">
+        <view class="inner-pulse" :class="'pulse-' + state"></view>
       </view>
     </view>
 
-    <!-- 底部状态波纹 -->
-    <view class="bottom-area">
-      <view class="ripple" :class="stateClass" v-if="state === 'LISTENING'"></view>
-      <view class="ripple ripple-delay" :class="stateClass" v-if="state === 'LISTENING'"></view>
+    <!-- 底部波纹（监听中） -->
+    <view class="bottom-area" v-if="state === 'listening'">
+      <view class="ripple"></view>
+      <view class="ripple ripple-delay"></view>
+    </view>
+
+    <!-- 首次提示 -->
+    <view class="tap-hint" v-if="!started">
+      <text class="tap-text">点击开始</text>
     </view>
   </view>
 </template>
 
 <script>
-import { fetchAutoOpen, fetchChat, getCurrentHour } from '../../utils/api.js'
-import { speak, stopSpeaking, isSpeaking } from '../../utils/speech.js'
-import { startVAD, stopVAD } from '../../utils/vad.js'
+import CONFIG from '../../utils/config.js'
+import { connect, sayHello, sendAudio, disconnect, isActive } from '../../utils/doubao-client.js'
+import { startRecording, stopRecording } from '../../utils/recorder.js'
+import { initPlayer, feedAudio, stopPlayback, destroyPlayer } from '../../utils/audio-player.js'
+import { getOpeningLine, getMoodLabel } from '../../utils/opening.js'
 
 const BAR_COUNT = 40
 
@@ -46,34 +48,31 @@ export default {
   data() {
     return {
       /**
-       * 状态机:
-       * IDLE       - 初始
-       * SPEAKING   - AI正在朗读
-       * LISTENING  - 等待用户说话（VAD监听中）
-       * RECORDING  - 用户正在说话
-       * PROCESSING - ASR识别 + 请求AI中
+       * 状态: idle / connecting / ai_speaking / listening / user_speaking / processing
        */
-      state: 'IDLE',
+      state: 'idle',
       bars: [],
-      currentVolume: 0,
-      animTimer: null
-    }
-  },
-
-  computed: {
-    stateClass() {
-      return 'state-' + this.state.toLowerCase()
+      started: false,
+      animTimer: null,
+      micStarted: false
     }
   },
 
   onLoad() {
+    console.log('╔══════════════════════════════╗')
+    console.log('║      婚后窒息 - 启动中       ║')
+    console.log('╚══════════════════════════════╝')
+    console.log('[启动] 模型:', CONFIG.MODEL_VERSION, '音色:', CONFIG.SPEAKER)
+    console.log('[启动] WebSocket:', CONFIG.WS_URL)
     this.initBars()
-    this.startBarAnimation()
+    this.startIdleAnimation()
   },
 
   onReady() {
-    // 请求麦克风权限后启动
-    this.requestPermissionAndStart()
+    console.log('[启动] 页面就绪，自动连接豆包...')
+    // H5和APP都自动启动，不等点击
+    this.started = true
+    this.startVoiceSession()
   },
 
   onUnload() {
@@ -90,335 +89,168 @@ export default {
     initBars() {
       const arr = []
       for (let i = 0; i < BAR_COUNT; i++) {
-        arr.push({
-          height: 8 + Math.random() * 12,
-          speed: 150 + Math.random() * 100
-        })
+        arr.push({ h: 8 + Math.random() * 12, sp: 200 })
       }
       this.bars = arr
     },
 
-    async requestPermissionAndStart() {
-      // #ifdef APP-PLUS
-      const granted = await this.requestAppPermission()
-      if (!granted) {
-        console.error('[Main] 麦克风权限被拒绝')
-        // 即使没权限也尝试启动（TTS可用）
-      }
-      // #endif
-
-      // 启动主流程
-      setTimeout(() => {
-        this.flowAutoOpen()
-      }, 600)
+    handleTap() {
+      // 已自动启动，点击不再重复连接
     },
 
-    // #ifdef APP-PLUS
-    requestAppPermission() {
-      return new Promise((resolve) => {
-        plus.android.requestPermissions(
-          ['android.permission.RECORD_AUDIO'],
-          (result) => {
-            resolve(result.granted && result.granted.length > 0)
-          },
-          (err) => {
-            console.error('[Permission]', err)
-            resolve(false)
+    // ==================== 核心流程 ====================
+
+    startVoiceSession() {
+      this.state = 'connecting'
+
+      // 初始化音频播放器
+      initPlayer((volume) => {
+        if (this.state === 'ai_speaking') {
+          this.updateBarsFromVolume(volume, 'speak')
+        }
+      })
+
+      // 连接豆包WebSocket
+      connect({
+        onConnectionReady: () => {},
+
+        onSessionStarted: (data) => {
+          // 发送开场白
+          const opening = CONFIG.SAY_HELLO_CONTENT || getOpeningLine()
+          sayHello(opening)
+          this.state = 'ai_speaking'
+          // 录音在AI说完开场白后启动（onTTSEnd）
+        },
+
+        onAudioData: (audioBuffer) => {
+          feedAudio(audioBuffer)
+          if (this.state !== 'ai_speaking') {
+            this.state = 'ai_speaking'
           }
-        )
+        },
+
+        onASRStart: () => {
+          stopPlayback()
+          this.state = 'user_speaking'
+        },
+
+        onASRText: ({ text, isInterim }) => {
+          // 日志已在 doubao-client.js 打印
+        },
+
+        onASREnd: () => {
+          this.state = 'processing'
+        },
+
+        onChatText: (text) => {
+          // 日志已在 doubao-client.js 打印
+        },
+
+        onTTSStart: (data) => {
+          this.state = 'ai_speaking'
+        },
+
+        onTTSEnd: (data) => {
+          this.state = 'listening'
+          // 第一次TTS结束后启动麦克风（开场白说完）
+          if (!this.micStarted) {
+            this.micStarted = true
+            console.log('[Main] AI开场白播完，启动麦克风...')
+            this.startMicStream()
+          }
+        },
+
+        onError: (err) => {
+          console.error('[错误]', err)
+          if (this.state !== 'listening') {
+            this.state = 'listening'
+          }
+        },
+
+        onDisconnect: () => {
+          console.log('[Main] 连接断开')
+          this.state = 'idle'
+          this.started = false
+          this.micStarted = false
+        }
       })
     },
-    // #endif
-
-    // ==================== 主交互流程 ====================
 
     /**
-     * 流程1: APP打开 → 获取开场白 → 朗读 → 进入监听
+     * 启动麦克风流式上传
+     * 持续录音 → 每帧PCM通过WebSocket发给豆包 → 服务端VAD自动检测
      */
-    async flowAutoOpen() {
-      this.state = 'PROCESSING'
-      try {
-        const hour = getCurrentHour()
-        console.log('[Flow] auto-open, hour=' + hour)
-        const text = await fetchAutoOpen(hour)
-        console.log('[Flow] 开场白:', text)
+    startMicStream() {
+      startRecording((pcmBuffer, seq) => {
+        sendAudio(pcmBuffer, seq)
 
-        // 朗读开场白
-        await this.speakAndVisualize(text)
-      } catch (e) {
-        console.error('[Flow] auto-open失败', e)
-        // 兜底朗读
-        await this.speakAndVisualize('你来了？你来干嘛？良心发现了？')
-      }
-
-      // 朗读完成 → 进入监听
-      this.startListening()
-    },
-
-    /**
-     * 流程2: 用户说完话 → 发送chat → 朗读回复 → 循环监听
-     */
-    async flowChat(userText) {
-      if (!userText || userText.trim() === '') {
-        // 没识别到有效内容，重新监听
-        this.startListening()
-        return
-      }
-
-      this.state = 'PROCESSING'
-      console.log('[Flow] 用户说:', userText)
-
-      try {
-        const hour = getCurrentHour()
-        const aiText = await fetchChat(userText, hour)
-        console.log('[Flow] AI回复:', aiText)
-
-        // 朗读AI回复
-        await this.speakAndVisualize(aiText)
-      } catch (e) {
-        console.error('[Flow] chat失败', e)
-        await this.speakAndVisualize('你说什么？我没听清！你能不能说话大声点！')
-      }
-
-      // 朗读完成 → 重新监听
-      this.startListening()
-    },
-
-    // ==================== TTS朗读 + 可视化 ====================
-
-    async speakAndVisualize(text) {
-      this.state = 'SPEAKING'
-
-      // 启动朗读可视化动画
-      this.startSpeakingAnimation(text)
-
-      try {
-        await speak(text)
-      } catch (e) {
-        console.error('[Speak] 朗读失败', e)
-      }
-
-      this.state = 'IDLE'
-    },
-
-    /**
-     * 朗读时的可视化：根据文本内容模拟音频波形
-     * 感叹号、问号位置音量大，逗号位置短暂降低
-     */
-    startSpeakingAnimation(text) {
-      // 构建音量曲线
-      const volumeCurve = this.buildVolumeCurve(text)
-      let curveIndex = 0
-      const stepMs = 80
-
-      if (this.speakAnimTimer) clearInterval(this.speakAnimTimer)
-
-      this.speakAnimTimer = setInterval(() => {
-        if (this.state !== 'SPEAKING') {
-          clearInterval(this.speakAnimTimer)
-          this.speakAnimTimer = null
-          return
+        // 如果在监听/用户说话状态，用PCM数据驱动可视化
+        if (this.state === 'listening' || this.state === 'user_speaking') {
+          const volume = this.analyzePCMVolume(pcmBuffer)
+          this.updateBarsFromVolume(volume, 'mic')
         }
-
-        const targetVolume = curveIndex < volumeCurve.length
-          ? volumeCurve[curveIndex]
-          : 40 + Math.random() * 30
-
-        this.currentVolume = targetVolume
-        this.updateBarsFromVolume(targetVolume, 'speak')
-        curveIndex++
-      }, stepMs)
+      })
     },
 
     /**
-     * 根据文本标点和字数构建模拟音量曲线
+     * 分析PCM帧音量（0-100）
      */
-    buildVolumeCurve(text) {
-      const curve = []
-      for (let i = 0; i < text.length; i++) {
-        const ch = text[i]
-        if (ch === '！' || ch === '!' || ch === '？' || ch === '?') {
-          curve.push(85 + Math.random() * 15)
-          curve.push(75 + Math.random() * 15)
-        } else if (ch === '，' || ch === ',' || ch === '。' || ch === '.') {
-          curve.push(15 + Math.random() * 10)
-          curve.push(10 + Math.random() * 10)
-        } else if (ch === '…' || ch === '~') {
-          curve.push(30 + Math.random() * 15)
-        } else {
-          curve.push(45 + Math.random() * 35)
-        }
+    analyzePCMVolume(buffer) {
+      const view = new Int16Array(buffer)
+      let sum = 0
+      for (let i = 0; i < view.length; i++) {
+        sum += Math.abs(view[i])
       }
-      return curve
+      const avg = sum / view.length
+      return Math.min(100, Math.round((avg / 32768) * 200))
     },
 
-    // ==================== VAD监听 ====================
+    // ==================== 可视化 ====================
 
-    startListening() {
-      this.state = 'LISTENING'
-      this.currentVolume = 0
-      console.log('[VAD] 开始监听...')
-
-      startVAD(
-        // onVoiceStart: 检测到人声
-        () => {
-          console.log('[VAD] 检测到人声!')
-          this.onUserStartSpeaking()
-        },
-        // onVoiceEnd: 人声结束
-        () => {
-          console.log('[VAD] 人声结束')
-          this.onUserStopSpeaking()
-        },
-        // onVolume: 音量回调
-        (volume) => {
-          this.currentVolume = volume
-          if (this.state === 'LISTENING' || this.state === 'RECORDING') {
-            this.updateBarsFromVolume(volume, 'mic')
-          }
-        }
-      )
-    },
-
-    stopListening() {
-      stopVAD()
-    },
-
-    /**
-     * 用户开始说话 → 如果AI在朗读则打断
-     */
-    onUserStartSpeaking() {
-      // 如果AI正在说话，立刻打断
-      if (this.state === 'SPEAKING') {
-        console.log('[Flow] 打断AI朗读!')
-        stopSpeaking()
-        if (this.speakAnimTimer) {
-          clearInterval(this.speakAnimTimer)
-          this.speakAnimTimer = null
-        }
-      }
-
-      this.state = 'RECORDING'
-      this.stopListening()
-
-      // 启动正式ASR识别
-      this.startASR()
-    },
-
-    /**
-     * 用户停止说话
-     */
-    onUserStopSpeaking() {
-      if (this.state === 'RECORDING') {
-        // ASR模块会自动处理结束
-        console.log('[Flow] 等待ASR结果...')
-      }
-    },
-
-    // ==================== ASR 录音识别 ====================
-
-    async startASR() {
-      this.state = 'RECORDING'
-      console.log('[ASR] 开始识别...')
-
-      try {
-        const { recognizeSpeech } = await import('../../utils/speech.js')
-        const text = await recognizeSpeech()
-        console.log('[ASR] 识别结果:', text)
-
-        // 识别完成 → 发送对话
-        this.flowChat(text)
-      } catch (e) {
-        console.error('[ASR] 识别失败', e)
-        // 失败后重新监听
-        this.startListening()
-      }
-    },
-
-    // ==================== 音频可视化 ====================
-
-    /**
-     * 持续的柱状图动画（idle状态下的呼吸效果）
-     */
-    startBarAnimation() {
+    startIdleAnimation() {
       if (this.animTimer) clearInterval(this.animTimer)
-
       this.animTimer = setInterval(() => {
-        if (this.state === 'IDLE' || this.state === 'PROCESSING') {
-          this.updateBarsIdle()
+        if (this.state === 'idle' || this.state === 'connecting' || this.state === 'processing') {
+          const time = Date.now() / 1000
+          for (let i = 0; i < this.bars.length; i++) {
+            const wave = Math.sin(time * 1.5 + i * 0.3) * 0.5 + 0.5
+            this.bars[i].h = this.state === 'processing' ? (10 + wave * 40) : (6 + wave * 18)
+            this.bars[i].sp = 300
+          }
         }
       }, 200)
     },
 
-    /**
-     * 空闲状态：微弱呼吸动画
-     */
-    updateBarsIdle() {
-      const time = Date.now() / 1000
-      for (let i = 0; i < this.bars.length; i++) {
-        const wave = Math.sin(time * 1.5 + i * 0.3) * 0.5 + 0.5
-        this.bars[i].height = 6 + wave * 18
-        this.bars[i].speed = 300 + Math.random() * 200
-      }
-    },
-
-    /**
-     * 根据音量更新柱状图
-     * @param {number} volume 0-100
-     * @param {string} mode 'speak' | 'mic'
-     */
     updateBarsFromVolume(volume, mode) {
-      const centerIndex = Math.floor(this.bars.length / 2)
-      const normalizedVol = volume / 100
+      const center = Math.floor(this.bars.length / 2)
+      const nv = volume / 100
 
       for (let i = 0; i < this.bars.length; i++) {
-        // 中间高两边低的分布
-        const distFromCenter = Math.abs(i - centerIndex) / centerIndex
-        const falloff = 1 - distFromCenter * 0.6
-
-        // 添加随机抖动
+        const dist = Math.abs(i - center) / center
+        const falloff = 1 - dist * 0.6
         const jitter = 0.7 + Math.random() * 0.6
 
         let h
         if (mode === 'speak') {
-          // AI说话：更有节奏感
           const wave = Math.sin(Date.now() / 120 + i * 0.5) * 0.3 + 0.7
-          h = normalizedVol * 180 * falloff * jitter * wave
+          h = nv * 180 * falloff * jitter * wave
         } else {
-          // 麦克风：更直接反映音量
-          h = normalizedVol * 200 * falloff * jitter
+          h = nv * 200 * falloff * jitter
         }
 
-        this.bars[i].height = Math.max(6, Math.min(220, h))
-        this.bars[i].speed = mode === 'speak' ? 80 + Math.random() * 60 : 50 + Math.random() * 40
+        this.bars[i].h = Math.max(6, Math.min(220, h))
+        this.bars[i].sp = mode === 'speak' ? 80 : 50
       }
     },
 
-    // ==================== 辅助 ====================
-
-    /**
-     * 用户点击屏幕 - 用于H5首次激活音频上下文
-     */
-    handleUserTap() {
-      // #ifdef H5
-      // 某些浏览器需要用户交互才能激活AudioContext/Speech
-      if (this.state === 'IDLE') {
-        this.flowAutoOpen()
-      }
-      // #endif
-    },
+    // ==================== 清理 ====================
 
     cleanup() {
-      stopSpeaking()
-      stopVAD()
-      if (this.animTimer) {
-        clearInterval(this.animTimer)
-        this.animTimer = null
-      }
-      if (this.speakAnimTimer) {
-        clearInterval(this.speakAnimTimer)
-        this.speakAnimTimer = null
-      }
+      if (this.animTimer) { clearInterval(this.animTimer); this.animTimer = null }
+      stopRecording()
+      stopPlayback()
+      destroyPlayer()
+      disconnect()
     }
   }
 }
@@ -437,246 +269,74 @@ export default {
   position: relative;
 }
 
-/* ==================== 顶部状态点 ==================== */
-.status-dot-wrapper {
+/* 提示 */
+.tap-hint {
   position: absolute;
-  top: 120rpx;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 260rpx;
+  animation: breathe 2s ease-in-out infinite;
 }
-.status-dot {
-  width: 16rpx;
-  height: 16rpx;
-  border-radius: 50%;
-  transition: all 0.5s ease;
-}
-.status-dot.state-idle {
-  background: #555;
-  box-shadow: 0 0 8rpx #555;
-}
-.status-dot.state-speaking {
-  background: #e94560;
-  box-shadow: 0 0 20rpx #e94560, 0 0 40rpx rgba(233, 69, 96, 0.4);
-  animation: dotPulse 0.8s ease-in-out infinite;
-}
-.status-dot.state-listening {
-  background: #4ecdc4;
-  box-shadow: 0 0 20rpx #4ecdc4;
-  animation: dotPulse 1.5s ease-in-out infinite;
-}
-.status-dot.state-recording {
-  background: #45b7d1;
-  box-shadow: 0 0 25rpx #45b7d1;
-  animation: dotPulse 0.5s ease-in-out infinite;
-}
-.status-dot.state-processing {
-  background: #f9ca24;
-  box-shadow: 0 0 15rpx #f9ca24;
-  animation: dotSpin 1s linear infinite;
-}
+.tap-text { font-size: 28rpx; color: rgba(255,255,255,0.5); letter-spacing: 4rpx; }
+@keyframes breathe { 0%,100%{opacity:0.4} 50%{opacity:1} }
 
-@keyframes dotPulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.8); opacity: 0.6; }
-}
-@keyframes dotSpin {
-  0% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(180deg) scale(1.5); }
-  100% { transform: rotate(360deg) scale(1); }
-}
+/* 状态灯 */
+.status-dot-wrapper { position: absolute; top: 120rpx; }
+.status-dot { width: 16rpx; height: 16rpx; border-radius: 50%; transition: all 0.5s; }
+.dot-idle { background: #555; }
+.dot-connecting { background: #f9ca24; animation: dotPulse 0.6s infinite; }
+.dot-ai_speaking { background: #e94560; box-shadow: 0 0 20rpx #e94560; animation: dotPulse 0.8s infinite; }
+.dot-listening { background: #4ecdc4; box-shadow: 0 0 20rpx #4ecdc4; animation: dotPulse 1.5s infinite; }
+.dot-user_speaking { background: #45b7d1; box-shadow: 0 0 25rpx #45b7d1; animation: dotPulse 0.4s infinite; }
+.dot-processing { background: #f9ca24; animation: dotSpin 1s linear infinite; }
+@keyframes dotPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.8);opacity:0.6} }
+@keyframes dotSpin { 0%{transform:rotate(0) scale(1)} 50%{transform:rotate(180deg) scale(1.5)} 100%{transform:rotate(360deg) scale(1)} }
 
-/* ==================== 中央可视化区域 ==================== */
-.visualizer-area {
-  position: relative;
-  width: 700rpx;
-  height: 500rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+/* 可视化区域 */
+.visualizer-area { position: relative; width: 700rpx; height: 500rpx; display: flex; align-items: center; justify-content: center; }
 
-/* 呼吸光圈 */
-.glow-ring {
-  position: absolute;
-  width: 420rpx;
-  height: 420rpx;
-  border-radius: 50%;
-  border: 2rpx solid transparent;
-  transition: all 0.6s ease;
-}
-.glow-ring.state-idle {
-  border-color: rgba(100, 100, 140, 0.15);
-  box-shadow: 0 0 40rpx rgba(100, 100, 140, 0.05);
-}
-.glow-ring.state-speaking {
-  border-color: rgba(233, 69, 96, 0.4);
-  box-shadow: 0 0 80rpx rgba(233, 69, 96, 0.2), inset 0 0 60rpx rgba(233, 69, 96, 0.05);
-  animation: glowPulse 1.2s ease-in-out infinite;
-}
-.glow-ring.state-listening {
-  border-color: rgba(78, 205, 196, 0.3);
-  box-shadow: 0 0 60rpx rgba(78, 205, 196, 0.15);
-  animation: glowPulse 2s ease-in-out infinite;
-}
-.glow-ring.state-recording {
-  border-color: rgba(69, 183, 209, 0.5);
-  box-shadow: 0 0 100rpx rgba(69, 183, 209, 0.25);
-  animation: glowPulse 0.6s ease-in-out infinite;
-}
-.glow-ring.state-processing {
-  border-color: rgba(249, 202, 36, 0.3);
-  box-shadow: 0 0 50rpx rgba(249, 202, 36, 0.1);
-  animation: glowSpin 2s linear infinite;
-}
+/* 光圈 */
+.glow-ring { position: absolute; width: 420rpx; height: 420rpx; border-radius: 50%; border: 2rpx solid transparent; transition: all 0.6s; }
+.ring-idle { border-color: rgba(100,100,140,0.15); }
+.ring-connecting { border-color: rgba(249,202,36,0.3); animation: glowSpin 2s linear infinite; }
+.ring-ai_speaking { border-color: rgba(233,69,96,0.4); box-shadow: 0 0 80rpx rgba(233,69,96,0.2); animation: glowPulse 1.2s infinite; }
+.ring-listening { border-color: rgba(78,205,196,0.3); box-shadow: 0 0 60rpx rgba(78,205,196,0.15); animation: glowPulse 2s infinite; }
+.ring-user_speaking { border-color: rgba(69,183,209,0.5); box-shadow: 0 0 100rpx rgba(69,183,209,0.25); animation: glowPulse 0.6s infinite; }
+.ring-processing { border-color: rgba(249,202,36,0.3); animation: glowSpin 2s linear infinite; }
+@keyframes glowPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.06);opacity:0.7} }
+@keyframes glowSpin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
 
-@keyframes glowPulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.06); opacity: 0.7; }
-}
-@keyframes glowSpin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
+/* 频谱柱 */
+.bars-container { display: flex; align-items: center; justify-content: center; gap: 4rpx; height: 300rpx; z-index: 2; }
+.bar { width: 6rpx; min-height: 6rpx; border-radius: 3rpx; transition-property: height; transition-timing-function: ease-out; }
+.bar-idle { background: linear-gradient(to top, #2a2a4a, #3a3a5a); }
+.bar-connecting { background: linear-gradient(to top, #4a4020, #f9ca24); animation: barLoad 1.2s infinite alternate; }
+.bar-ai_speaking { background: linear-gradient(to top, #e94560, #ff6b81, #ff8e9e); box-shadow: 0 0 8rpx rgba(233,69,96,0.5); }
+.bar-listening { background: linear-gradient(to top, #2a5a5a, #4ecdc4); }
+.bar-user_speaking { background: linear-gradient(to top, #2a4a6a, #45b7d1, #7dd3e8); box-shadow: 0 0 10rpx rgba(69,183,209,0.5); }
+.bar-processing { background: linear-gradient(to top, #4a4020, #f9ca24); animation: barLoad 1.2s infinite alternate; }
+@keyframes barLoad { 0%{opacity:0.3} 100%{opacity:1} }
 
-/* ==================== 频谱柱状图 ==================== */
-.bars-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4rpx;
-  height: 300rpx;
-  z-index: 2;
-}
+/* 中心圆 */
+.center-circle { position: absolute; width: 160rpx; height: 160rpx; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.5s; z-index: 3; }
+.circle-idle { background: radial-gradient(circle, #1a1a3a, #0f0f25); border: 2rpx solid rgba(100,100,140,0.2); }
+.circle-connecting { background: radial-gradient(circle, #2a2510, #1a1a0a); border: 2rpx solid rgba(249,202,36,0.4); animation: processingSpin 2s linear infinite; }
+.circle-ai_speaking { background: radial-gradient(circle, #3a1020, #1a0810); border: 2rpx solid rgba(233,69,96,0.5); box-shadow: 0 0 40rpx rgba(233,69,96,0.3); }
+.circle-listening { background: radial-gradient(circle, #0f2a28, #0a1a18); border: 2rpx solid rgba(78,205,196,0.4); }
+.circle-user_speaking { background: radial-gradient(circle, #0f2030, #0a1520); border: 2rpx solid rgba(69,183,209,0.6); box-shadow: 0 0 50rpx rgba(69,183,209,0.3); }
+.circle-processing { background: radial-gradient(circle, #2a2510, #1a1a0a); border: 2rpx solid rgba(249,202,36,0.4); animation: processingSpin 2s linear infinite; }
+@keyframes processingSpin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
 
-.bar {
-  width: 6rpx;
-  min-height: 6rpx;
-  border-radius: 3rpx;
-  transition-property: height, background-color, box-shadow;
-  transition-timing-function: ease-out;
-}
+.inner-pulse { width: 60rpx; height: 60rpx; border-radius: 50%; transition: all 0.5s; }
+.pulse-idle { background: rgba(100,100,140,0.1); }
+.pulse-connecting { background: rgba(249,202,36,0.3); animation: innerP 0.8s infinite alternate; }
+.pulse-ai_speaking { background: rgba(233,69,96,0.4); animation: innerP 0.4s infinite alternate; }
+.pulse-listening { background: rgba(78,205,196,0.25); animation: innerP 1.5s infinite alternate; }
+.pulse-user_speaking { background: rgba(69,183,209,0.5); animation: innerP 0.3s infinite alternate; }
+.pulse-processing { background: rgba(249,202,36,0.3); animation: innerP 0.8s infinite alternate; }
+@keyframes innerP { 0%{transform:scale(0.8);opacity:0.5} 100%{transform:scale(1.3);opacity:1} }
 
-.bar.state-idle {
-  background: linear-gradient(to top, #2a2a4a, #3a3a5a);
-}
-.bar.state-speaking {
-  background: linear-gradient(to top, #e94560, #ff6b81, #ff8e9e);
-  box-shadow: 0 0 8rpx rgba(233, 69, 96, 0.5);
-}
-.bar.state-listening {
-  background: linear-gradient(to top, #2a5a5a, #4ecdc4);
-  box-shadow: 0 0 6rpx rgba(78, 205, 196, 0.3);
-}
-.bar.state-recording {
-  background: linear-gradient(to top, #2a4a6a, #45b7d1, #7dd3e8);
-  box-shadow: 0 0 10rpx rgba(69, 183, 209, 0.5);
-}
-.bar.state-processing {
-  background: linear-gradient(to top, #4a4020, #f9ca24);
-  animation: barLoading 1.2s ease-in-out infinite alternate;
-}
-
-@keyframes barLoading {
-  0% { opacity: 0.3; }
-  100% { opacity: 1; }
-}
-
-/* ==================== 中心圆 ==================== */
-.center-circle {
-  position: absolute;
-  width: 160rpx;
-  height: 160rpx;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.5s ease;
-  z-index: 3;
-}
-.center-circle.state-idle {
-  background: radial-gradient(circle, #1a1a3a 0%, #0f0f25 100%);
-  border: 2rpx solid rgba(100, 100, 140, 0.2);
-}
-.center-circle.state-speaking {
-  background: radial-gradient(circle, #3a1020 0%, #1a0810 100%);
-  border: 2rpx solid rgba(233, 69, 96, 0.5);
-  box-shadow: 0 0 40rpx rgba(233, 69, 96, 0.3);
-}
-.center-circle.state-listening {
-  background: radial-gradient(circle, #0f2a28 0%, #0a1a18 100%);
-  border: 2rpx solid rgba(78, 205, 196, 0.4);
-  box-shadow: 0 0 30rpx rgba(78, 205, 196, 0.2);
-}
-.center-circle.state-recording {
-  background: radial-gradient(circle, #0f2030 0%, #0a1520 100%);
-  border: 2rpx solid rgba(69, 183, 209, 0.6);
-  box-shadow: 0 0 50rpx rgba(69, 183, 209, 0.3);
-}
-.center-circle.state-processing {
-  background: radial-gradient(circle, #2a2510 0%, #1a1a0a 100%);
-  border: 2rpx solid rgba(249, 202, 36, 0.4);
-  animation: processingSpin 2s linear infinite;
-}
-
-@keyframes processingSpin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.inner-pulse {
-  width: 60rpx;
-  height: 60rpx;
-  border-radius: 50%;
-  transition: all 0.5s ease;
-}
-.inner-pulse.state-idle {
-  background: rgba(100, 100, 140, 0.1);
-}
-.inner-pulse.state-speaking {
-  background: rgba(233, 69, 96, 0.4);
-  animation: innerPulse 0.4s ease-in-out infinite alternate;
-}
-.inner-pulse.state-listening {
-  background: rgba(78, 205, 196, 0.25);
-  animation: innerPulse 1.5s ease-in-out infinite alternate;
-}
-.inner-pulse.state-recording {
-  background: rgba(69, 183, 209, 0.5);
-  animation: innerPulse 0.3s ease-in-out infinite alternate;
-}
-.inner-pulse.state-processing {
-  background: rgba(249, 202, 36, 0.3);
-  animation: innerPulse 0.8s ease-in-out infinite alternate;
-}
-
-@keyframes innerPulse {
-  0% { transform: scale(0.8); opacity: 0.5; }
-  100% { transform: scale(1.3); opacity: 1; }
-}
-
-/* ==================== 底部波纹 ==================== */
-.bottom-area {
-  position: absolute;
-  bottom: 200rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ripple {
-  position: absolute;
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: 50%;
-  border: 2rpx solid rgba(78, 205, 196, 0.5);
-  animation: rippleExpand 2s ease-out infinite;
-}
-.ripple-delay {
-  animation-delay: 1s;
-}
-
-@keyframes rippleExpand {
-  0% { transform: scale(1); opacity: 0.8; }
-  100% { transform: scale(4); opacity: 0; }
-}
+/* 底部波纹 */
+.bottom-area { position: absolute; bottom: 200rpx; }
+.ripple { position: absolute; width: 80rpx; height: 80rpx; border-radius: 50%; border: 2rpx solid rgba(78,205,196,0.5); animation: rippleEx 2s ease-out infinite; }
+.ripple-delay { animation-delay: 1s; }
+@keyframes rippleEx { 0%{transform:scale(1);opacity:0.8} 100%{transform:scale(4);opacity:0} }
 </style>
