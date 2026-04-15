@@ -16,6 +16,7 @@ public class AutoOpenController {
     private final OpeningLineService openingLineService;
 
     /**
+     *  http://localhost:8092/gm/admin.html
      * GET /api/auto-open?time_hour=N
      * APP打开时自动调用，返回攻击型开场白
      */

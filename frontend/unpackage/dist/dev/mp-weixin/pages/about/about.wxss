@@ -1,0 +1,331 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ------------------------------
+  全局适配：微信小程序 + 苹果安全区
+------------------------------ */
+page.data-v-92c79dbc {
+  background: #ffffff;
+  margin: 0;
+  padding: 0;
+}
+.about-page.data-v-92c79dbc {
+  width: 100vw;
+  min-height: 100vh;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+/* ------------------------------
+  导航栏：自动适配苹果刘海/灵动岛
+------------------------------ */
+.navbar.data-v-92c79dbc {
+  padding-top: calc(25px + 20rpx);
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  padding-bottom: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.98);
+  -webkit-backdrop-filter: blur(20rpx);
+          backdrop-filter: blur(20rpx);
+  z-index: 99;
+}
+.nav-back.data-v-92c79dbc {
+  min-width: 120rpx;
+  min-height: 72rpx;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+.nav-back.data-v-92c79dbc:active {
+  opacity: 0.6;
+  -webkit-transform: translateX(-4rpx);
+          transform: translateX(-4rpx);
+}
+.back-text.data-v-92c79dbc {
+  font-size: 28rpx;
+  color: rgba(0,0,0,0.6);
+}
+.nav-title.data-v-92c79dbc {
+  font-size: 32rpx;
+  color: rgba(0,0,0,0.85);
+  font-weight: 500;
+}
+.nav-empty.data-v-92c79dbc {
+  width: 80rpx;
+}
+/* ------------------------------
+  内容滚动区
+------------------------------ */
+.scroll-container.data-v-92c79dbc {
+  flex: 1;
+  padding: 0 32rpx;
+  box-sizing: border-box;
+  width: 100%;
+}
+/* 应用信息 */
+.app-info.data-v-92c79dbc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60rpx 0 48rpx;
+}
+.app-logo.data-v-92c79dbc {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 32rpx;
+  margin-bottom: 24rpx;
+}
+.app-name.data-v-92c79dbc {
+  font-size: 44rpx;
+  color: #1a1a1a;
+  font-weight: 500;
+  margin-bottom: 8rpx;
+}
+.app-version.data-v-92c79dbc {
+  font-size: 24rpx;
+  color: rgba(0,0,0,0.35);
+}
+/* 卡片通用样式 */
+.card-section.data-v-92c79dbc {
+  margin-bottom: 24rpx;
+}
+.card.data-v-92c79dbc {
+  background: #f7f7f8;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  border: 1rpx solid rgba(0,0,0,0.06);
+}
+.card-header.data-v-92c79dbc {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+.card-title.data-v-92c79dbc {
+  font-size: 28rpx;
+  color: rgba(0,0,0,0.8);
+  font-weight: 500;
+}
+.update-time.data-v-92c79dbc {
+  font-size: 22rpx;
+  color: rgba(0,0,0,0.35);
+}
+/* 特性列表 */
+.feature-item.data-v-92c79dbc {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 16rpx;
+}
+.feature-dot.data-v-92c79dbc {
+  color: #e94560;
+  margin-right: 12rpx;
+  font-size: 22rpx;
+}
+.feature-text.data-v-92c79dbc {
+  flex: 1;
+  font-size: 26rpx;
+  color: rgba(0,0,0,0.55);
+  line-height: 1.5;
+}
+/* 赞助列表 */
+.sponsor-scroll.data-v-92c79dbc {
+  max-height: 320rpx;
+}
+.sponsor-item.data-v-92c79dbc {
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid rgba(0,0,0,0.06);
+}
+.sponsor-name.data-v-92c79dbc {
+  font-size: 26rpx;
+  color: rgba(0,0,0,0.55);
+}
+.empty-tip.data-v-92c79dbc {
+  text-align: center;
+  padding: 40rpx 0;
+}
+.empty-tip text.data-v-92c79dbc {
+  color: rgba(0,0,0,0.25);
+  font-size: 24rpx;
+}
+/* 联系开发者 */
+.contact-card.data-v-92c79dbc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(233, 69, 96, 0.08);
+  border-radius: 24rpx;
+  padding: 28rpx;
+  margin: 40rpx 0;
+  border: 1rpx solid rgba(233,69,96,0.15);
+  transition: all 0.2s ease;
+}
+.contact-card.data-v-92c79dbc:active {
+  background: rgba(233,69,96,0.12);
+  -webkit-transform: scale(0.98);
+          transform: scale(0.98);
+}
+.contact-icon.data-v-92c79dbc {
+  margin-right: 12rpx;
+  font-size: 28rpx;
+}
+.contact-text.data-v-92c79dbc {
+  font-size: 26rpx;
+  color: #e94560;
+  font-weight: 500;
+}
+/* ------------------------------
+  免责声明 + 苹果底部安全区
+------------------------------ */
+.disclaimer.data-v-92c79dbc {
+  padding: 32rpx 0;
+}
+.disclaimer-title.data-v-92c79dbc {
+  display: block;
+  text-align: center;
+  font-size: 24rpx;
+  color: rgba(0,0,0,0.4);
+  margin-bottom: 12rpx;
+}
+.disclaimer-content.data-v-92c79dbc {
+  font-size: 22rpx;
+  color: rgba(0,0,0,0.3);
+  line-height: 1.6;
+  text-align: center;
+}
+/* 底部安全区：适配iPhone底部横条 */
+.safe-bottom.data-v-92c79dbc {
+  height: env(safe-area-inset-bottom);
+}
+

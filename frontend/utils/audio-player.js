@@ -7,12 +7,26 @@
 let volumeLevel = 0
 let volumeCallback = null
 
+// ==================== 音频历史（Max复播） ====================
+let currentRoundFrames = []   // 当前轮收集的PCM帧
+let audioHistory = []         // 归档的历史音频 ArrayBuffer[]
+let replaySource = null       // 复播中的AudioBufferSourceNode
+let replayTimer = null        // 复播衰减定时器
+
 // #ifdef H5
 let h5AudioContext = null
 let h5GainNode = null
 let h5Analyser = null
 let h5AnimFrame = null
 let h5NextStartTime = 0
+// #endif
+
+// #ifdef MP-WEIXIN
+let wxAudioContext = null
+let wxGainNode = null
+let wxNextStartTime = 0
+let wxVolumeTimer = null
+let wxIsPlaying = false
 // #endif
 
 // #ifdef APP-PLUS
@@ -28,6 +42,17 @@ let isPlayingNative = false
  */
 export function initPlayer(onVolume) {
   volumeCallback = onVolume
+
+  // #ifdef MP-WEIXIN
+  if (!wxAudioContext) {
+    wxAudioContext = wx.createWebAudioContext()
+    wxGainNode = wxAudioContext.createGain()
+    wxGainNode.gain.value = 1.2
+    wxGainNode.connect(wxAudioContext.destination)
+    wxNextStartTime = 0
+    console.log('[Player] 小程序WebAudioContext已创建, sampleRate=' + wxAudioContext.sampleRate)
+  }
+  // #endif
 
   // #ifdef H5
   if (!h5AudioContext) {
@@ -70,6 +95,13 @@ export function initPlayer(onVolume) {
 export function feedAudio(audioData) {
   if (!audioData || audioData.byteLength === 0) return
 
+  // #ifdef MP-WEIXIN
+  if (wxAudioContext) {
+    playPCMWeixin(audioData)
+    return
+  }
+  // #endif
+
   // #ifdef H5
   if (h5AudioContext) {
     if (h5AudioContext.state === 'suspended') {
@@ -102,6 +134,22 @@ export function flushSentence() {
  * 等待当前缓冲音频全部播完后回调
  */
 export function waitPlaybackEnd(callback) {
+  // #ifdef MP-WEIXIN
+  if (!wxAudioContext || wxNextStartTime <= wxAudioContext.currentTime) {
+    callback()
+    return
+  }
+  const checkWx = () => {
+    if (!wxAudioContext || wxNextStartTime <= wxAudioContext.currentTime) {
+      callback()
+    } else {
+      setTimeout(checkWx, 100)
+    }
+  }
+  setTimeout(checkWx, 100)
+  return
+  // #endif
+
   // #ifdef H5
   if (!h5AudioContext || h5NextStartTime <= h5AudioContext.currentTime) {
     callback()
@@ -137,6 +185,12 @@ export function waitPlaybackEnd(callback) {
 export function stopPlayback() {
   volumeLevel = 0
 
+  // #ifdef MP-WEIXIN
+  wxNextStartTime = 0
+  wxIsPlaying = false
+  if (wxVolumeTimer) { clearInterval(wxVolumeTimer); wxVolumeTimer = null }
+  // #endif
+
   // #ifdef H5
   h5NextStartTime = 0
   if (h5GainNode && h5Analyser && h5AudioContext) {
@@ -155,12 +209,16 @@ export function stopPlayback() {
   // #endif
 }
 
-export function getVolume() {
-  return volumeLevel
-}
-
 export function destroyPlayer() {
   stopPlayback()
+  // #ifdef MP-WEIXIN
+  if (wxVolumeTimer) { clearInterval(wxVolumeTimer); wxVolumeTimer = null }
+  if (wxAudioContext) {
+    try { wxAudioContext.close() } catch (e) {}
+    wxAudioContext = null
+  }
+  // #endif
+
   // #ifdef H5
   if (h5AnimFrame) cancelAnimationFrame(h5AnimFrame)
   if (h5AudioContext) {
@@ -169,6 +227,182 @@ export function destroyPlayer() {
   }
   // #endif
 }
+
+/**
+ * 获取当前音频缓冲超前时间（秒）
+ * 用于字幕同步：文本事件比音频播放提前，需要延迟这么久再显示
+ */
+export function getBufferDelay() {
+  // #ifdef MP-WEIXIN
+  if (wxAudioContext) {
+    return Math.max(0, wxNextStartTime - wxAudioContext.currentTime)
+  }
+  // #endif
+
+  // #ifdef H5
+  if (h5AudioContext) {
+    return Math.max(0, h5NextStartTime - h5AudioContext.currentTime)
+  }
+  // #endif
+
+  return 0
+}
+
+// ==================== Max复播 ====================
+
+/**
+ * 收集当前轮音频帧（在onAudioData中调用）
+ */
+export function collectFrame(audioData) {
+  if (audioData && audioData.byteLength > 0) {
+    currentRoundFrames.push(audioData.slice(0))
+  }
+}
+
+/**
+ * 归档当前轮音频（在onTTSEnd中调用）
+ */
+export function archiveCurrentRound() {
+  if (currentRoundFrames.length === 0) return
+  // 合并所有帧为一个大ArrayBuffer
+  let totalLen = 0
+  for (let i = 0; i < currentRoundFrames.length; i++) totalLen += currentRoundFrames[i].byteLength
+  const merged = new Uint8Array(totalLen)
+  let offset = 0
+  for (let i = 0; i < currentRoundFrames.length; i++) {
+    merged.set(new Uint8Array(currentRoundFrames[i]), offset)
+    offset += currentRoundFrames[i].byteLength
+  }
+  audioHistory.push(merged.buffer)
+  currentRoundFrames = []
+  console.log('[Player] 归档音频, 历史共', audioHistory.length, '段,', (totalLen / 1024).toFixed(1), 'KB')
+}
+
+/**
+ * 随机复播一段历史音频（叠加播放）
+ * @returns {boolean} 是否有可播内容
+ */
+export function replayRandom() {
+  if (audioHistory.length === 0) return false
+  const idx = audioHistory.length === 1 ? 0 : Math.floor(Math.random() * audioHistory.length)
+  const pcmData = audioHistory[idx]
+  console.log('[Player] Max复播第', idx + 1, '段,', (pcmData.byteLength / 1024).toFixed(1), 'KB')
+
+  const int16 = new Int16Array(pcmData)
+  if (int16.length === 0) return false
+  const float32 = new Float32Array(int16.length)
+  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768
+
+  // #ifdef MP-WEIXIN
+  if (wxAudioContext) {
+    const buf = wxAudioContext.createBuffer(1, float32.length, 24000)
+    buf.getChannelData(0).set(float32)
+    replaySource = wxAudioContext.createBufferSource()
+    replaySource.buffer = buf
+    const gain = wxAudioContext.createGain()
+    gain.gain.value = 0.7
+    replaySource.connect(gain)
+    gain.connect(wxAudioContext.destination)
+    replaySource.start(0)
+    replaySource.onended = () => { replaySource = null }
+    return true
+  }
+  // #endif
+
+  // #ifdef H5
+  if (h5AudioContext) {
+    const buf = h5AudioContext.createBuffer(1, float32.length, 24000)
+    buf.getChannelData(0).set(float32)
+    replaySource = h5AudioContext.createBufferSource()
+    replaySource.buffer = buf
+    const gain = h5AudioContext.createGain()
+    gain.gain.value = 0.7
+    replaySource.connect(gain)
+    gain.connect(h5AudioContext.destination)
+    replaySource.start(0)
+    replaySource.onended = () => { replaySource = null }
+    return true
+  }
+  // #endif
+
+  return false
+}
+
+/**
+ * 停止复播
+ */
+export function stopReplay() {
+  if (replaySource) {
+    try { replaySource.stop() } catch (e) {}
+    replaySource = null
+  }
+}
+
+/**
+ * 获取历史音频数据（上报用）
+ */
+export function getHistory() {
+  return audioHistory
+}
+
+/**
+ * 清空历史
+ */
+export function clearHistory() {
+  currentRoundFrames = []
+  audioHistory = []
+  stopReplay()
+}
+
+// ==================== 微信小程序 PCM 播放 ====================
+
+// #ifdef MP-WEIXIN
+function playPCMWeixin(audioData) {
+  if (!wxAudioContext || !wxGainNode) return
+
+  const int16 = new Int16Array(audioData)
+  if (int16.length === 0) return
+
+  const float32 = new Float32Array(int16.length)
+  let sumSquares = 0
+  for (let i = 0; i < int16.length; i++) {
+    const sample = int16[i] / 32768
+    float32[i] = sample
+    sumSquares += sample * sample
+  }
+
+  const buffer = wxAudioContext.createBuffer(1, float32.length, 24000)
+  buffer.getChannelData(0).set(float32)
+
+  const source = wxAudioContext.createBufferSource()
+  source.buffer = buffer
+  source.connect(wxGainNode)
+
+  const now = wxAudioContext.currentTime
+  const startAt = Math.max(now, wxNextStartTime)
+  source.start(startAt)
+  wxNextStartTime = startAt + buffer.duration
+
+  // 用实际音频数据计算音量
+  const rms = Math.sqrt(sumSquares / int16.length)
+  volumeLevel = Math.min(100, Math.round(rms * 300))
+  volumeCallback && volumeCallback(volumeLevel)
+
+  // 启动衰减定时器：音频播完后归零
+  if (!wxIsPlaying) {
+    wxIsPlaying = true
+    wxVolumeTimer = setInterval(() => {
+      if (!wxAudioContext || wxNextStartTime <= wxAudioContext.currentTime) {
+        volumeLevel = 0
+        volumeCallback && volumeCallback(0)
+        wxIsPlaying = false
+        clearInterval(wxVolumeTimer)
+        wxVolumeTimer = null
+      }
+    }, 100)
+  }
+}
+// #endif
 
 // ==================== H5 PCM 播放 ====================
 

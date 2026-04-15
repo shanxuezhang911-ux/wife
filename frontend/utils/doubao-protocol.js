@@ -10,23 +10,75 @@
  *   byte3: reserved 0x00
  */
 
+// ==================== TextEncoder/TextDecoder polyfill (微信小程序) ====================
+
+function getTextEncoder() {
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder()
+  return {
+    encode(str) {
+      const utf8 = []
+      for (let i = 0; i < str.length; i++) {
+        let code = str.charCodeAt(i)
+        if (code < 0x80) {
+          utf8.push(code)
+        } else if (code < 0x800) {
+          utf8.push(0xC0 | (code >> 6), 0x80 | (code & 0x3F))
+        } else if (code >= 0xD800 && code <= 0xDBFF) {
+          const hi = code
+          const lo = str.charCodeAt(++i)
+          code = 0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00)
+          utf8.push(0xF0 | (code >> 18), 0x80 | ((code >> 12) & 0x3F), 0x80 | ((code >> 6) & 0x3F), 0x80 | (code & 0x3F))
+        } else {
+          utf8.push(0xE0 | (code >> 12), 0x80 | ((code >> 6) & 0x3F), 0x80 | (code & 0x3F))
+        }
+      }
+      return new Uint8Array(utf8)
+    }
+  }
+}
+
+function getTextDecoder() {
+  if (typeof TextDecoder !== 'undefined') return new TextDecoder()
+  return {
+    decode(uint8arr) {
+      const bytes = uint8arr instanceof Uint8Array ? uint8arr : new Uint8Array(uint8arr)
+      let str = ''
+      for (let i = 0; i < bytes.length;) {
+        const b = bytes[i]
+        if (b < 0x80) {
+          str += String.fromCharCode(b); i++
+        } else if ((b & 0xE0) === 0xC0) {
+          str += String.fromCharCode(((b & 0x1F) << 6) | (bytes[i + 1] & 0x3F)); i += 2
+        } else if ((b & 0xF0) === 0xE0) {
+          str += String.fromCharCode(((b & 0x0F) << 12) | ((bytes[i + 1] & 0x3F) << 6) | (bytes[i + 2] & 0x3F)); i += 3
+        } else if ((b & 0xF8) === 0xF0) {
+          const cp = ((b & 0x07) << 18) | ((bytes[i + 1] & 0x3F) << 12) | ((bytes[i + 2] & 0x3F) << 6) | (bytes[i + 3] & 0x3F)
+          const surr = cp - 0x10000
+          str += String.fromCharCode(0xD800 + (surr >> 10), 0xDC00 + (surr & 0x3FF)); i += 4
+        } else {
+          i++
+        }
+      }
+      return str
+    }
+  }
+}
+
+const textEncoder = getTextEncoder()
+const textDecoder = getTextDecoder()
+
 // ==================== 常量 ====================
 
 // Message Types
 const MSG_FULL_CLIENT_REQUEST = 0b0001   // 0x1 客户端文本事件
-const MSG_AUDIO_ONLY_REQUEST = 0b0010    // 0x2 客户端音频数据
 const MSG_FULL_SERVER_RESPONSE = 0b1001  // 0x9 服务端文本事件
 const MSG_AUDIO_ONLY_RESPONSE = 0b1011   // 0xB 服务端音频数据
 const MSG_ERROR = 0b1111                 // 0xF 错误
 
 // Flags
 const FLAG_EVENT = 0b0100       // 携带 event ID
-const FLAG_NO_SEQ = 0b0000
-const FLAG_SEQ_POSITIVE = 0b0001
-const FLAG_LAST_NO_SEQ = 0b0010
 
 // Serialization
-const SERIAL_RAW = 0b0000
 const SERIAL_JSON = 0b0001
 
 // Compression
@@ -90,7 +142,7 @@ export function getEventName(id) {
  */
 export function encodeTextEvent(eventId, jsonPayload, sessionId) {
   const payloadStr = jsonPayload !== null ? JSON.stringify(jsonPayload) : '{}'
-  const payloadBytes = new TextEncoder().encode(payloadStr)
+  const payloadBytes = textEncoder.encode(payloadStr)
 
   // 判断是否是 Connect 级事件
   const isConnectEvent = (eventId === EVENT.StartConnection || eventId === EVENT.FinishConnection)
@@ -99,7 +151,7 @@ export function encodeTextEvent(eventId, jsonPayload, sessionId) {
   let optionalSize = 4  // event 固定4字节
   let sessionIdBytes = null
   if (!isConnectEvent && sessionId) {
-    sessionIdBytes = new TextEncoder().encode(sessionId)
+    sessionIdBytes = textEncoder.encode(sessionId)
     optionalSize += 4 + sessionIdBytes.length  // size(4B) + content
   }
 
@@ -130,55 +182,6 @@ export function encodeTextEvent(eventId, jsonPayload, sessionId) {
   view.setUint32(offset, payloadBytes.length)
   offset += 4
   new Uint8Array(buf, offset, payloadBytes.length).set(payloadBytes)
-
-  return buf
-}
-
-/**
- * 编码音频数据帧 (TaskRequest事件200)
- * @param {ArrayBuffer} pcmData PCM音频数据
- * @param {number} sequence 序列号（>0 非终端，-1 最后一帧）
- * @param {string} sessionId 会话ID
- * @returns {ArrayBuffer}
- */
-export function encodeAudioFrame(pcmData, sequence, sessionId) {
-  const pcmBytes = new Uint8Array(pcmData)
-  const sessionIdBytes = new TextEncoder().encode(sessionId)
-
-  const isLast = sequence < 0
-  const flags = FLAG_EVENT | (isLast ? FLAG_LAST_NO_SEQ : FLAG_SEQ_POSITIVE)
-
-  // optional: sequence(4B) + event(4B) + sessionIdSize(4B) + sessionId(NB)
-  const optionalSize = 4 + 4 + 4 + sessionIdBytes.length
-  const totalSize = 4 + optionalSize + 4 + pcmBytes.length
-  const buf = new ArrayBuffer(totalSize)
-  const view = new DataView(buf)
-  let offset = 0
-
-  // header
-  view.setUint8(offset++, 0x11)
-  view.setUint8(offset++, (MSG_AUDIO_ONLY_REQUEST << 4) | flags)
-  view.setUint8(offset++, (SERIAL_RAW << 4) | COMPRESS_NONE)
-  view.setUint8(offset++, 0x00)
-
-  // optional: sequence
-  view.setInt32(offset, isLast ? -1 : sequence)
-  offset += 4
-
-  // optional: event
-  view.setUint32(offset, EVENT.TaskRequest)
-  offset += 4
-
-  // optional: session id
-  view.setUint32(offset, sessionIdBytes.length)
-  offset += 4
-  new Uint8Array(buf, offset, sessionIdBytes.length).set(sessionIdBytes)
-  offset += sessionIdBytes.length
-
-  // payload
-  view.setUint32(offset, pcmBytes.length)
-  offset += 4
-  new Uint8Array(buf, offset, pcmBytes.length).set(pcmBytes)
 
   return buf
 }
@@ -230,10 +233,10 @@ export function decodeFrame(data) {
       offset += 4
       if (payloadSize > 0 && offset + payloadSize <= data.byteLength) {
         try {
-          const text = new TextDecoder().decode(new Uint8Array(data, offset, payloadSize))
+          const text = textDecoder.decode(new Uint8Array(data, offset, payloadSize))
           payload = JSON.parse(text)
         } catch (e) {
-          payload = new TextDecoder().decode(new Uint8Array(data, offset, payloadSize))
+          payload = textDecoder.decode(new Uint8Array(data, offset, payloadSize))
         }
       }
     }
@@ -278,10 +281,10 @@ export function decodeFrame(data) {
         payload = data.slice(offset, offset + payloadSize)
       } else {
         try {
-          const text = new TextDecoder().decode(new Uint8Array(data, offset, payloadSize))
+          const text = textDecoder.decode(new Uint8Array(data, offset, payloadSize))
           payload = JSON.parse(text)
         } catch (e) {
-          payload = new TextDecoder().decode(new Uint8Array(data, offset, payloadSize))
+          payload = textDecoder.decode(new Uint8Array(data, offset, payloadSize))
         }
       }
     }

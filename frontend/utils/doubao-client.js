@@ -4,17 +4,18 @@
  * 一个 WebSocket = ASR + LLM对话 + TTS + VAD打断，全部搞定
  *
  * 交互流程:
- *   connect → StartConnection → StartSession → SayHello(开场白)
+ *   fetchConfig → connect → StartConnection → StartSession
  *   → 持续发送麦克风PCM → 服务端VAD自动检测
  *   → ASRInfo(检测到说话) → ASRResponse(识别文本) → ASREnded(说完)
  *   → ChatResponse(AI文本) → TTSResponse(AI语音) → TTSEnded(说完)
  *   → 循环...
+ *
+ * 敏感配置（密钥、人设、模型参数）从后端 GET /api/config/session 拉取
  */
 
 import CONFIG from './config.js'
 import {
   encodeTextEvent,
-  encodeAudioFrame,
   decodeFrame,
   EVENT,
   SERVER_EVENT,
@@ -28,6 +29,9 @@ let isSessionActive = false
 
 // 全局发送序列号（服务端对所有客户端帧统一计数，音频帧的显式sequence必须与之匹配）
 let globalSequence = 0
+
+// 从后端拉取的会话配置
+let sessionConfig = null
 
 // 当前轮次的ASR和Chat文本累积（用于日志打印）
 let currentASRText = ''
@@ -45,6 +49,7 @@ let callbacks = {
   onTTSStart: null,           // AI开始说话
   onTTSSentenceEnd: null,     // AI一句话说完（用于flush音频）
   onTTSEnd: null,             // AI全部说完了
+  onBlocked: null,            // 被限流
   onError: null,              // 错误
   onDisconnect: null          // 断开连接
 }
@@ -60,23 +65,61 @@ function uuid() {
 }
 
 /**
+ * 从后端拉取会话配置（模型、音色、人设等）
+ * 必须在 connect() 之前调用
+ */
+export function fetchConfig() {
+  return new Promise((resolve, reject) => {
+    uni.request({
+      url: CONFIG.API_BASE + '/api/config/session',
+      method: 'GET',
+      success: (res) => {
+        if (res.statusCode === 200 && res.data && res.data.data) {
+          sessionConfig = res.data.data
+          console.log('[Doubao] 配置已拉取, model:', sessionConfig.modelVersion, 'speaker:', sessionConfig.speaker)
+          resolve(sessionConfig)
+        } else {
+          console.error('[Doubao] 拉取配置失败', res)
+          reject(new Error('拉取配置失败'))
+        }
+      },
+      fail: (err) => {
+        console.error('[Doubao] 拉取配置网络错误', err)
+        reject(err)
+      }
+    })
+  })
+}
+
+/**
+ * 获取已拉取的会话配置
+ */
+export function getConfig() {
+  return sessionConfig
+}
+
+/**
  * 初始化并连接
  * @param {object} cbs 回调函数
+ * @param {string} deviceId 设备指纹ID
  */
-export function connect(cbs) {
+export function connect(cbs, deviceId) {
   callbacks = { ...callbacks, ...cbs }
   sessionId = uuid()
 
-  console.log('[Doubao] 连接中...', CONFIG.WS_URL)
+  const wsUrl = deviceId ? CONFIG.WS_URL + '?deviceId=' + encodeURIComponent(deviceId) : CONFIG.WS_URL
+  console.log('[Doubao] 连接中...', wsUrl)
 
-  // 所有平台统一连接代理服务器（密钥在代理端，前端无密钥）
+  // 所有平台统一连接后端WebSocket（密钥在后端，前端无密钥）
   // #ifdef APP-PLUS
   ws = plus.net.createWebSocket()
-  ws.open(CONFIG.WS_URL)
+  ws.open(wsUrl)
   ws.onopen = onOpen
   ws.onmessage = (event) => {
     if (event.data instanceof ArrayBuffer) {
       onBinaryMessage(event.data)
+    } else if (typeof event.data === 'string') {
+      onTextMessage(event.data)
     }
   }
   ws.onerror = (err) => {
@@ -91,14 +134,49 @@ export function connect(cbs) {
   }
   // #endif
 
+  // #ifdef MP-WEIXIN
+  ws = uni.connectSocket({
+    url: wsUrl,
+    header: { 'content-type': 'application/octet-stream' },
+    success: () => console.log('[Doubao] 小程序WS发起连接'),
+    fail: (err) => {
+      console.error('[Doubao] 小程序WS连接失败', err)
+      callbacks.onError && callbacks.onError(err)
+    }
+  })
+  ws.onOpen(() => {
+    console.log('[Doubao] 小程序WS已连接')
+    onOpen()
+  })
+  ws.onMessage((res) => {
+    if (res.data instanceof ArrayBuffer) {
+      onBinaryMessage(res.data)
+    } else if (typeof res.data === 'string') {
+      onTextMessage(res.data)
+    }
+  })
+  ws.onError((err) => {
+    console.error('[Doubao] WS错误', err)
+    callbacks.onError && callbacks.onError(err)
+  })
+  ws.onClose(() => {
+    console.log('[Doubao] WS断开')
+    isConnected = false
+    isSessionActive = false
+    callbacks.onDisconnect && callbacks.onDisconnect()
+  })
+  // #endif
+
   // #ifdef H5
-  console.log('[Doubao] 连接代理:', CONFIG.WS_URL)
-  ws = new WebSocket(CONFIG.WS_URL)
+  console.log('[Doubao] 连接后端:', wsUrl)
+  ws = new WebSocket(wsUrl)
   ws.binaryType = 'arraybuffer'
   ws.onopen = onOpen
   ws.onmessage = (event) => {
     if (event.data instanceof ArrayBuffer) {
       onBinaryMessage(event.data)
+    } else if (typeof event.data === 'string') {
+      onTextMessage(event.data)
     }
   }
   ws.onerror = (err) => {
@@ -112,6 +190,23 @@ export function connect(cbs) {
     callbacks.onDisconnect && callbacks.onDisconnect()
   }
   // #endif
+}
+
+/**
+ * 处理服务端文本消息（限流等控制消息）
+ */
+function onTextMessage(data) {
+  try {
+    const msg = JSON.parse(data)
+    if (msg.type === 'blocked') {
+      console.log('[Doubao] 被限流:', msg.reason)
+      callbacks.onBlocked && callbacks.onBlocked(msg)
+      return
+    }
+    console.log('[Doubao] 收到文本消息:', data)
+  } catch (e) {
+    console.log('[Doubao] 收到非JSON文本:', data)
+  }
 }
 
 function onOpen() {
@@ -152,7 +247,7 @@ function onBinaryMessage(data) {
     // ---- Session ----
     case SERVER_EVENT.SessionStarted:
       console.log('[会话] 已启动, dialogId:', frame.payload && frame.payload.dialog_id)
-      console.log('[会话] 模型:', CONFIG.MODEL_VERSION, '音色:', CONFIG.SPEAKER)
+      console.log('[会话] 模型:', sessionConfig?.modelVersion, '音色:', sessionConfig?.speaker)
       isSessionActive = true
       callbacks.onSessionStarted && callbacks.onSessionStarted(frame.payload)
       break
@@ -274,15 +369,21 @@ function onBinaryMessage(data) {
 }
 
 /**
- * 发送 StartSession 事件
+ * 发送 StartSession 事件（使用从后端拉取的配置）
  */
 function startSession() {
+  if (!sessionConfig) {
+    console.error('[Doubao] sessionConfig未加载，无法启动会话')
+    callbacks.onError && callbacks.onError({ message: '配置未加载' })
+    return
+  }
+
   const payload = {
     tts: {
-      speaker: CONFIG.SPEAKER,
-      speed_ratio: CONFIG.TTS_SPEED_RATIO,
-      pitch_ratio: CONFIG.TTS_PITCH_RATIO,
-      volume_ratio: CONFIG.TTS_VOLUME_RATIO,
+      speaker: sessionConfig.speaker,
+      speed_ratio: sessionConfig.ttsSpeedRatio,
+      pitch_ratio: sessionConfig.ttsPitchRatio,
+      volume_ratio: sessionConfig.ttsVolumeRatio,
       audio_config: {
         format: 'pcm_s16le',
         sample_rate: 24000,
@@ -291,52 +392,29 @@ function startSession() {
     },
     asr: {
       extra: {
-        end_smooth_window_ms: CONFIG.END_SMOOTH_WINDOW_MS,
+        end_smooth_window_ms: sessionConfig.endSmoothWindowMs,
         enable_custom_vad: false,
         enable_asr_twopass: false
       }
     },
     dialog: {
-      character_manifest: CONFIG.CHARACTER_MANIFEST,
-      temperature: CONFIG.DIALOG_TEMPERATURE,
-      top_p: CONFIG.DIALOG_TOP_P,
-      max_tokens: CONFIG.DIALOG_MAX_TOKENS,
-      frequency_penalty: CONFIG.DIALOG_FREQUENCY_PENALTY,
-      presence_penalty: CONFIG.DIALOG_PRESENCE_PENALTY,
+      character_manifest: sessionConfig.characterManifest,
+      temperature: sessionConfig.dialogTemperature,
+      top_p: sessionConfig.dialogTopP,
+      max_tokens: sessionConfig.dialogMaxTokens,
+      frequency_penalty: sessionConfig.dialogFrequencyPenalty,
+      presence_penalty: sessionConfig.dialogPresencePenalty,
       extra: {
         strict_audit: false,
-        model: CONFIG.MODEL_VERSION
+        model: sessionConfig.modelVersion
       }
     }
   }
 
-  console.log('[发送] StartSession → model=' + CONFIG.MODEL_VERSION + ', speaker=' + CONFIG.SPEAKER)
-  console.log('[发送] TTS: speed=' + CONFIG.TTS_SPEED_RATIO + ' pitch=' + CONFIG.TTS_PITCH_RATIO)
-  console.log('[发送] 人设摘要:', CONFIG.CHARACTER_MANIFEST.substring(0, 50) + '...')
+  console.log('[发送] StartSession → model=' + sessionConfig.modelVersion + ', speaker=' + sessionConfig.speaker)
+  console.log('[发送] TTS: speed=' + sessionConfig.ttsSpeedRatio + ' pitch=' + sessionConfig.ttsPitchRatio)
+  console.log('[发送] 人设摘要:', sessionConfig.characterManifest.substring(0, 50) + '...')
   sendBinary(encodeTextEvent(EVENT.StartSession, payload, sessionId))
-}
-
-/**
- * 发送 SayHello 事件（开场白）
- * @param {string} content 开场白文本
- */
-export function sayHello(content) {
-  if (!isSessionActive) {
-    console.warn('[Doubao] 会话未就绪，延迟发送SayHello')
-    return
-  }
-  console.log('[发送] SayHello 开场白:')
-  console.log('  「' + content + '」')
-  sendBinary(encodeTextEvent(EVENT.SayHello, { content }, sessionId))
-}
-
-/**
- * 发送麦克风PCM音频帧
- * @param {ArrayBuffer} pcmData PCM音频数据
- */
-export function sendAudio(pcmData) {
-  if (!isSessionActive || !ws) return
-  sendBinary(encodeAudioFrame(pcmData, globalSequence, sessionId))
 }
 
 /**
@@ -368,17 +446,19 @@ export function disconnect() {
     sendBinary(encodeTextEvent(EVENT.FinishConnection, {}, null))
   } catch (e) {}
   setTimeout(() => {
-    try { ws && ws.close() } catch (e) {}
+    try {
+      if (ws) {
+        // #ifdef MP-WEIXIN
+        ws.close({})
+        // #endif
+        // #ifndef MP-WEIXIN
+        ws.close()
+        // #endif
+      }
+    } catch (e) {}
     ws = null
     isConnected = false
   }, 500)
-}
-
-/**
- * 获取当前会话ID
- */
-export function getSessionId() {
-  return sessionId
 }
 
 /**
@@ -393,6 +473,9 @@ function sendBinary(buffer) {
   globalSequence++
   try {
     // #ifdef APP-PLUS
+    ws.send({ data: buffer })
+    // #endif
+    // #ifdef MP-WEIXIN
     ws.send({ data: buffer })
     // #endif
     // #ifdef H5

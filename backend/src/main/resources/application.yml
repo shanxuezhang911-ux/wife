@@ -5,6 +5,7 @@ spring:
   application:
     name: wife-server
 
+# ==================== AI (原有) ====================
 ai:
   provider: online
   online:
@@ -14,6 +15,45 @@ ai:
     timeout: 120000
     stream: true
 
+# ==================== 豆包语音API凭证 ====================
+doubao:
+  url: wss://openspeech.bytedance.com/api/v3/realtime/dialogue
+  app-id: "7050730175"
+  access-token: fcfNjdty_SQTPAH4SgGGl9het8IfWK42
+  resource-id: volc.speech.dialog
+  app-key: PlgvMymc7f3tQnJ6
+
+# ==================== 前端会话配置（前端从此拉取） ====================
+session:
+  model-version: "2.2.0.0"
+  speaker: "S_BiJcpLrZ1"
+  tts-speed-ratio: 1.8
+  tts-pitch-ratio: 1.9
+  tts-volume-ratio: 1.9
+  character-manifest: "你是婚后窒息型妻子，情绪敏感压抑，长期处于失望与委屈状态，说话尖锐、连贯、压迫感极强，语气层层递进，越说越激动。表达以个人感受、生活现状、对方能力与担当为主，不做动作描写，不频繁用你开头，不指责具体小动作，翻旧账也只翻两个人相处的旧账 比如不给你买东西 或者送的廉价，和闺蜜对比人家嫁得好。同时重点狠狠打击其自尊心与生存价值，直击赚钱能力低下、养家无能 内心疲惫绝望、情绪压抑到爆发。重点强化从能力、担当、状态、责任感狠狠切入：既无撑起家庭的实力，也无扛事的担当，状态麻木消极，对家庭毫无责任感，连最基本的依靠都给不了，言语要尖锐戳心，不留情面。常用表达方向：还算有个成年人的样子吗？家撑不起来，日子过不明白，没钱 没前途 生活压力全堆在一边，真正扛过的事情寥寥无几，这样的状态只会让人越来越心寒，当初的选择如今只剩无尽失望，输出必须连贯流畅、段落自然、长度不少于50字，持续保持压抑、失望、尖锐的窒息感，不主动停止，不温柔、不讲理、不道歉、不和解。偶尔会说跟你过日子真累 当初真是瞎了眼要你有什么用从来都这样 永远改不了 能不能成熟点 你能不能别这么自私 不想跟你过了 当初嫁给谁也比你好 当初可以找个更好的  是不是觉得 和一些人格侮辱性的词"
+  dialog-temperature: 0.95
+  dialog-top-p: 0.98
+  dialog-max-tokens: 1500
+  dialog-frequency-penalty: 0.5
+  dialog-presence-penalty: 0.5
+  end-smooth-window-ms: 1000
+  timeout-minutes: 1
+
+# ==================== 访问限流 ====================
+rate-limit:
+  ip-max-per-day: 20
+  device-max-per-day: 10
+
+# ==================== 缓存回放 ====================
+cache:
+  enabled: false
+
+# ==================== GM管理 ====================
+gm:
+  port: 8092
+  token: wife-gm-secret-2026
+
+# ==================== Voice (原有占位) ====================
 voice:
   asr:
     enabled: false

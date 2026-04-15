@@ -12,7 +12,8 @@
       "Bash(pdftotext /Users/centurygame/Documents/豆包语音_端到端实时语音大模型API接入文档_1775265608.pdf -)",
       "Bash(node:*)",
       "Bash(find /Users/centurygame/wife -type f -name package.json -o -name build.gradle -o -name pom.xml -o -name settings.gradle -o -name manifest.json -o -name .cursorrules -o -name .copilot*)",
-      "Bash(find /Users/centurygame/wife -type f \\\\\\(-name *test*.java -o -name *Test.java \\\\\\))"
+      "Bash(find /Users/centurygame/wife -type f \\\\\\(-name *test*.java -o -name *Test.java \\\\\\))",
+      "Bash(./gradlew clean:*)"
     ]
   }
 }

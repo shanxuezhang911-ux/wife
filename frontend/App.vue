@@ -10,7 +10,7 @@ export default {
 
 <style>
 page {
-  background-color: #0a0a1a;
+  background-color: #ffffff;
   height: 100%;
   overflow: hidden;
 }
