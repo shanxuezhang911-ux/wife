@@ -12016,11 +12016,12 @@ exports.default = void 0;
  * 前端启动时从 GET /api/config/session 拉取
  */
 
-var SERVER_IP = '10.0.49.94';
+//const SERVER_IP = '10.0.49.94'
+var SERVER_IP = '49.232.184.74';
 var _default = {
   // ==================== 服务器地址 ====================
-  API_BASE: "http://".concat(SERVER_IP, ":8091"),
-  WS_URL: "ws://".concat(SERVER_IP, ":8091/ws/doubao"),
+  API_BASE: "http://".concat(SERVER_IP, ":9001"),
+  WS_URL: "ws://".concat(SERVER_IP, ":9001/ws/doubao"),
   // ==================== 音频配置（纯本地） ====================
   AUDIO: {
     INPUT_SAMPLE_RATE: 16000,
@@ -12448,38 +12449,50 @@ function getAuthToken() {
  * 自动添加身份token + 加密body + 解密响应
  */
 function secureRequest(options) {
-  var token = getAuthToken();
+  var token;
+  try {
+    token = getAuthToken();
+  } catch (e) {
+    console.error('[Crypto] getAuthToken异常:', e);
+    options.fail && options.fail({
+      errMsg: 'token生成失败: ' + e.message
+    });
+    return;
+  }
   var headers = _objectSpread({}, options.header || {});
   headers['X-Auth-Token'] = token;
 
   // 加密 POST body
   var data = options.data;
-  var contentType = headers['content-type'] || headers['Content-Type'] || '';
   if (data && options.method && options.method.toUpperCase() !== 'GET') {
     var jsonStr = typeof data === 'string' ? data : JSON.stringify(data);
     data = _cbcEncrypt(jsonStr);
-    contentType = 'text/plain;charset=UTF-8';
+    headers['content-type'] = 'text/plain;charset=UTF-8';
   }
-  headers['content-type'] = contentType || undefined;
+  console.log('[Crypto] 请求:', options.method || 'GET', options.url);
   uni.request({
     url: options.url,
     method: options.method || 'GET',
     header: headers,
     data: data,
+    timeout: options.timeout || 15000,
     success: function success(res) {
+      console.log('[Crypto] 响应:', res.statusCode, options.url);
       // 解密响应
       if (res.statusCode === 200 && res.data && typeof res.data === 'string') {
         try {
           var decrypted = _cbcDecrypt(res.data);
           res.data = JSON.parse(decrypted);
         } catch (e) {
-          // 可能不是加密响应，保持原样
           console.warn('[Crypto] 响应解密失败，保持原样');
         }
       }
       options.success && options.success(res);
     },
-    fail: options.fail,
+    fail: function fail(err) {
+      console.error('[Crypto] 请求失败:', options.url, err);
+      options.fail && options.fail(err);
+    },
     complete: options.complete
   });
 }

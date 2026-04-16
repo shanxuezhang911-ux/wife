@@ -62,23 +62,31 @@ public class ApiSecurityFilter implements Filter {
             }
         }
 
-        // 3. 执行 controller，缓存响应
-        ContentCachingResponseWrapper wrappedResponse = new ContentCachingResponseWrapper(res);
-        chain.doFilter(wrappedRequest, wrappedResponse);
+        // 3. 判断是否为流式接口（SSE），流式接口不能缓冲响应
+        boolean isStreaming = req.getRequestURI().contains("/stream");
 
-        // 4. 加密响应 body
-        byte[] responseBody = wrappedResponse.getContentAsByteArray();
-        if (responseBody.length > 0 && isJsonResponse(wrappedResponse)) {
-            String plainResponse = new String(responseBody, StandardCharsets.UTF_8);
-            String encryptedResponse = AesUtil.encrypt(plainResponse, securityConfig.getAesKey());
-
-            wrappedResponse.resetBuffer();
-            res.setContentType("text/plain;charset=UTF-8");
-            res.setContentLength(encryptedResponse.getBytes(StandardCharsets.UTF_8).length);
-            res.getOutputStream().write(encryptedResponse.getBytes(StandardCharsets.UTF_8));
-            res.getOutputStream().flush();
+        if (isStreaming) {
+            // SSE/流式接口：只验token+解密body，不加密响应（避免缓冲破坏流式推送）
+            chain.doFilter(wrappedRequest, res);
         } else {
-            wrappedResponse.copyBodyToResponse();
+            // 普通接口：缓存响应后加密
+            ContentCachingResponseWrapper wrappedResponse = new ContentCachingResponseWrapper(res);
+            chain.doFilter(wrappedRequest, wrappedResponse);
+
+            // 4. 加密响应 body
+            byte[] responseBody = wrappedResponse.getContentAsByteArray();
+            if (responseBody.length > 0 && isJsonResponse(wrappedResponse)) {
+                String plainResponse = new String(responseBody, StandardCharsets.UTF_8);
+                String encryptedResponse = AesUtil.encrypt(plainResponse, securityConfig.getAesKey());
+
+                wrappedResponse.resetBuffer();
+                res.setContentType("text/plain;charset=UTF-8");
+                res.setContentLength(encryptedResponse.getBytes(StandardCharsets.UTF_8).length);
+                res.getOutputStream().write(encryptedResponse.getBytes(StandardCharsets.UTF_8));
+                res.getOutputStream().flush();
+            } else {
+                wrappedResponse.copyBodyToResponse();
+            }
         }
     }
 
@@ -134,6 +142,7 @@ public class ApiSecurityFilter implements Filter {
      */
     private static class DecryptedBodyRequestWrapper extends HttpServletRequestWrapper {
 
+        private static final String JSON_CONTENT_TYPE = "application/json;charset=UTF-8";
         private final byte[] body;
 
         public DecryptedBodyRequestWrapper(HttpServletRequest request, String decryptedBody) {
@@ -143,7 +152,23 @@ public class ApiSecurityFilter implements Filter {
 
         @Override
         public String getContentType() {
-            return "application/json;charset=UTF-8";
+            return JSON_CONTENT_TYPE;
+        }
+
+        @Override
+        public String getHeader(String name) {
+            if ("Content-Type".equalsIgnoreCase(name)) {
+                return JSON_CONTENT_TYPE;
+            }
+            return super.getHeader(name);
+        }
+
+        @Override
+        public java.util.Enumeration<String> getHeaders(String name) {
+            if ("Content-Type".equalsIgnoreCase(name)) {
+                return java.util.Collections.enumeration(java.util.Collections.singletonList(JSON_CONTENT_TYPE));
+            }
+            return super.getHeaders(name);
         }
 
         @Override
