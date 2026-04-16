@@ -32,6 +32,11 @@ public class ApiSecurityFilter implements Filter {
         HttpServletRequest req = (HttpServletRequest) request;
         HttpServletResponse res = (HttpServletResponse) response;
 
+        // 请求日志：IP来源 + 方法 + URL
+        String clientIp = getClientIp(req);
+        log.info("[Security] {} {} {} ip={}", req.getMethod(), req.getRequestURI(),
+                req.getQueryString() != null ? "?" + req.getQueryString() : "", clientIp);
+
         // 1. 验证身份 token
         String token = req.getHeader("X-Auth-Token");
         if (token == null || token.isEmpty()) {
@@ -51,11 +56,14 @@ public class ApiSecurityFilter implements Filter {
         if (hasBody(req)) {
             String encryptedBody = readBody(req);
             if (encryptedBody != null && !encryptedBody.isEmpty()) {
+                log.debug("[Security] body长度: {}字节, uri={}", encryptedBody.length(), req.getRequestURI());
                 try {
                     String decryptedBody = AesUtil.decrypt(encryptedBody.trim(), securityConfig.getAesKey());
+                    log.debug("[Security] 解密后body长度: {}字节", decryptedBody.length());
                     wrappedRequest = new DecryptedBodyRequestWrapper(req, decryptedBody);
                 } catch (Exception e) {
-                    log.warn("[Security] body解密失败, uri={}", req.getRequestURI());
+                    log.warn("[Security] body解密失败, uri={}, bodyLen={}, error={}",
+                            req.getRequestURI(), encryptedBody.length(), e.getMessage());
                     res.setStatus(403);
                     return;
                 }
@@ -124,6 +132,18 @@ public class ApiSecurityFilter implements Filter {
     private boolean isJsonResponse(ContentCachingResponseWrapper response) {
         String contentType = response.getContentType();
         return contentType != null && contentType.contains("application/json");
+    }
+
+    private String getClientIp(HttpServletRequest req) {
+        String xff = req.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isEmpty()) {
+            return xff.split(",")[0].trim();
+        }
+        String realIp = req.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isEmpty()) {
+            return realIp;
+        }
+        return req.getRemoteAddr();
     }
 
     private String readBody(HttpServletRequest req) throws IOException {

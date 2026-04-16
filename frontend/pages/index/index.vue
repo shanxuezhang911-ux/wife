@@ -84,34 +84,55 @@ export default {
 
   onLoad() {
     // 生成或读取设备指纹ID
-    let deviceId = uni.getStorageSync('deviceId')
+    // #ifdef MP-WEIXIN
+    let deviceId = wx.getStorageSync('wife_device_id')
+    if (!deviceId) {
+      try {
+        const info = wx.getSystemInfoSync()
+        // 用稳定的设备信息拼接hash作为指纹
+        const raw = (info.brand || '') + (info.model || '') + (info.system || '') + (info.screenWidth || '') + (info.screenHeight || '')
+        let hash = 0
+        for (let i = 0; i < raw.length; i++) {
+          hash = ((hash << 5) - hash) + raw.charCodeAt(i)
+          hash = hash & hash
+        }
+        deviceId = 'wx-' + Math.abs(hash).toString(16) + '-' + Date.now().toString(36)
+      } catch (e) {
+        deviceId = 'wx-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+      }
+      wx.setStorageSync('wife_device_id', deviceId)
+    }
+    // #endif
+    // #ifndef MP-WEIXIN
+    let deviceId = uni.getStorageSync('wife_device_id')
     if (!deviceId) {
       deviceId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
         const r = Math.random() * 16 | 0
         return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
       })
-      uni.setStorageSync('deviceId', deviceId)
+      uni.setStorageSync('wife_device_id', deviceId)
     }
+    // #endif
     this.deviceId = deviceId
     console.log('[启动] deviceId:', deviceId)
   },
 
   onReady() {
-    uni.setKeepScreenOn({ keepScreenOn: true })
-    this.startDraw()
-    // 先拉取后端配置，再启动语音会话
-    fetchConfig().then(() => {
-      const cfg = getConfig()
-      console.log('[启动] 模型:', cfg.modelVersion, '音色:', cfg.speaker, '缓存模式:', cfg.cacheMode)
-      if (cfg.cacheMode) {
-        this.tryCacheOrLive()
-      } else {
-        this.startVoiceSession()
-      }
-    }).catch((err) => {
-      console.error('[启动] 拉取配置失败', err)
-      this.ended = true
-    })
+    this.initSession()
+  },
+
+  onShow() {
+    if (this._navigatingAway) return
+    // 从后台恢复：已结束 或 豆包已断开 → 全部重来
+    if (this.ended || !isActive()) {
+      console.log('[启动] onShow重新初始化, ended=' + this.ended + ', isActive=' + isActive())
+      this.cleanup()
+      this.resetState()
+      // 等旧连接彻底关闭后再启动新会话
+      setTimeout(() => {
+        this.initSession()
+      }, 600)
+    }
   },
 
   onUnload() { this.cleanup() },
@@ -123,6 +144,44 @@ export default {
   },
 
   methods: {
+    resetState() {
+      this.state = 'idle'
+      this.ending = false
+      this.finalSent = false
+      this.gotFinalText = false
+      this.chatAccum = ''
+      this.ended = false
+      this.volume = 0
+      this.maxMode = false
+      this.sceneKey = ''
+      this.roundTexts = []
+      this.currentRoundText = ''
+      this.isBlocked = false
+      this.normalEnded = false
+      this.subtitleLines = []
+      this.subtitleBuffer = ''
+      this.subtitleQueue = []
+      this.endTextVisible = false
+      this.endTextKey = 0
+    },
+
+    initSession() {
+      uni.setKeepScreenOn({ keepScreenOn: true })
+      if (!this.drawTimer) this.startDraw()
+      fetchConfig().then(() => {
+        const cfg = getConfig()
+        console.log('[启动] 模型:', cfg.modelVersion, '音色:', cfg.speaker, '缓存模式:', cfg.cacheMode)
+        if (cfg.cacheMode) {
+          this.tryCacheOrLive()
+        } else {
+          this.startVoiceSession()
+        }
+      }).catch((err) => {
+        console.error('[启动] 拉取配置失败', err)
+        this.ended = true
+      })
+    },
+
     showEndText() {
       // 每次点击：销毁旧元素 → 重建 → 重新触发动画
       this.endTextVisible = false

@@ -443,25 +443,26 @@ export function finishSession() {
  * 断开连接
  */
 export function disconnect() {
-  if (!isConnected) return
-  try {
-    finishSession()
-    sendBinary(encodeTextEvent(EVENT.FinishConnection, {}, null))
-  } catch (e) {}
-  setTimeout(() => {
+  if (isConnected) {
     try {
-      if (ws) {
-        // #ifdef MP-WEIXIN
-        ws.close({})
-        // #endif
-        // #ifndef MP-WEIXIN
-        ws.close()
-        // #endif
-      }
+      finishSession()
+      sendBinary(encodeTextEvent(EVENT.FinishConnection, {}, null))
     } catch (e) {}
-    ws = null
-    isConnected = false
-  }, 500)
+  }
+  // 无论isConnected状态如何，都强制关闭ws
+  try {
+    if (ws) {
+      // #ifdef MP-WEIXIN
+      ws.close({})
+      // #endif
+      // #ifndef MP-WEIXIN
+      ws.close()
+      // #endif
+    }
+  } catch (e) {}
+  ws = null
+  isConnected = false
+  isSessionActive = false
 }
 
 /**

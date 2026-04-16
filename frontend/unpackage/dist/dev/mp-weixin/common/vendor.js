@@ -12900,20 +12900,21 @@ function finishSession() {
  * 断开连接
  */
 function disconnect() {
-  if (!isConnected) return;
-  try {
-    finishSession();
-    sendBinary((0, _doubaoProtocol.encodeTextEvent)(_doubaoProtocol.EVENT.FinishConnection, {}, null));
-  } catch (e) {}
-  setTimeout(function () {
+  if (isConnected) {
     try {
-      if (ws) {
-        ws.close({});
-      }
+      finishSession();
+      sendBinary((0, _doubaoProtocol.encodeTextEvent)(_doubaoProtocol.EVENT.FinishConnection, {}, null));
     } catch (e) {}
-    ws = null;
-    isConnected = false;
-  }, 500);
+  }
+  // 无论isConnected状态如何，都强制关闭ws
+  try {
+    if (ws) {
+      ws.close({});
+    }
+  } catch (e) {}
+  ws = null;
+  isConnected = false;
+  isSessionActive = false;
 }
 
 /**
