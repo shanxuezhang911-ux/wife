@@ -270,10 +270,10 @@ var _default = {
     },
     copyQQ: function copyQQ() {
       uni.setClipboardData({
-        data: '123456',
+        data: '1101376422',
         success: function success() {
           uni.showToast({
-            title: 'QQ号复制成功',
+            title: 'QQ群复制成功',
             icon: 'success',
             duration: 1200
           });

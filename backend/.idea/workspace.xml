@@ -6,16 +6,15 @@
   <component name="ChangeListManager">
     <list default="true" id="54f54cc3-c539-487a-a0a7-c9d6ed7840e3" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/wife/server/filter/ApiSecurityFilter.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/wife/server/filter/ApiSecurityFilter.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/application.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/pages/index/index.vue" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/pages/index/index.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/wife/server/service/SponsorService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/wife/server/service/SponsorService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../frontend/pages/about/about.vue" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/pages/about/about.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/common/main.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/common/main.js.map" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/common/vendor.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/common/vendor.js.map" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/pages/about/about.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/pages/about/about.js.map" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/pages/index/index.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/pages/index/index.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/common/vendor.js" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/common/vendor.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/index/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/index/index.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/utils/doubao-client.js" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/utils/doubao-client.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.js" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.wxml" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.wxml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.wxss" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.wxss" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

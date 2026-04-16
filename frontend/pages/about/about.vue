@@ -62,7 +62,7 @@
       <!-- 联系开发者 -->
       <view class="contact-card" @click="copyQQ">
         <text class="contact-icon">💬</text>
-        <text class="contact-text">联系开发者 · 点击复制QQ</text>
+        <text class="contact-text">联系开发者 · 点击复制QQ群</text>
       </view>
 
       <!-- 免责声明 - 底部安全区 -->
@@ -114,10 +114,10 @@ export default {
     },
     copyQQ() {
       uni.setClipboardData({
-        data: '123456',
+        data: '1101376422',
         success: () => {
           uni.showToast({
-            title: 'QQ号复制成功',
+            title: 'QQ群复制成功',
             icon: 'success',
             duration: 1200
           })

@@ -85,7 +85,7 @@ public class SponsorService {
                 }
             }
         } else {
-            for (String name : List.of("阿凯", "Molly", "大飞", "西米露", "老徐", "Jesse", "小棠", "可乐")) {
+            for (String name : List.of("阿凯", "Molly", "情是堕落的伤", "西米露", "老徐", "Jesse", "小棠")) {
                 sponsors.add(new Sponsor(UUID.randomUUID().toString(), null, name, 0));
             }
             save();
