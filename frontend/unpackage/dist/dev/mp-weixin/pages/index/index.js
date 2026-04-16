@@ -231,20 +231,19 @@ var _default = {
     console.log('[启动] deviceId:', deviceId);
   },
   onReady: function onReady() {
+    this._sessionStarted = true;
     this.initSession();
   },
   onShow: function onShow() {
-    var _this2 = this;
     if (this._navigatingAway) return;
+    // 首次加载时onShow先于onReady执行，此时不应初始化
+    if (!this._sessionStarted) return;
     // 从后台恢复：已结束 或 豆包已断开 → 全部重来
     if (this.ended || !(0, _doubaoClient.isActive)()) {
       console.log('[启动] onShow重新初始化, ended=' + this.ended + ', isActive=' + (0, _doubaoClient.isActive)());
       this.cleanup();
       this.resetState();
-      // 等旧连接彻底关闭后再启动新会话
-      setTimeout(function () {
-        _this2.initSession();
-      }, 600);
+      this.initSession();
     }
   },
   onUnload: function onUnload() {
@@ -278,7 +277,7 @@ var _default = {
       this.endTextKey = 0;
     },
     initSession: function initSession() {
-      var _this3 = this;
+      var _this2 = this;
       uni.setKeepScreenOn({
         keepScreenOn: true
       });
@@ -287,32 +286,37 @@ var _default = {
         var cfg = (0, _doubaoClient.getConfig)();
         console.log('[启动] 模型:', cfg.modelVersion, '音色:', cfg.speaker, '缓存模式:', cfg.cacheMode);
         if (cfg.cacheMode) {
-          _this3.tryCacheOrLive();
+          _this2.tryCacheOrLive();
         } else {
-          _this3.startVoiceSession();
+          _this2.startVoiceSession();
         }
       }).catch(function (err) {
         console.error('[启动] 拉取配置失败', err);
-        _this3.ended = true;
+        uni.showModal({
+          title: '连接失败',
+          content: '无法连接服务器，请检查网络。非调试模式需HTTPS+域名。',
+          showCancel: false
+        });
+        _this2.ended = true;
       });
     },
     showEndText: function showEndText() {
-      var _this4 = this;
+      var _this3 = this;
       // 每次点击：销毁旧元素 → 重建 → 重新触发动画
       this.endTextVisible = false;
       this.$nextTick(function () {
-        _this4.endTextKey++;
-        _this4.endTextVisible = true;
+        _this3.endTextKey++;
+        _this3.endTextVisible = true;
       });
     },
     goAbout: function goAbout() {
-      var _this5 = this;
+      var _this4 = this;
       this._navigatingAway = true;
       uni.navigateTo({
         url: '/pages/about/about',
         complete: function complete() {
           setTimeout(function () {
-            _this5._navigatingAway = false;
+            _this4._navigatingAway = false;
           }, 500);
         }
       });
@@ -350,14 +354,14 @@ var _default = {
     },
     // 没有新文字时，3s自动向上滚动（移除最旧一行）
     resetScrollTimer: function resetScrollTimer() {
-      var _this6 = this;
+      var _this5 = this;
       this.clearScrollTimer();
       this.subtitleScrollTimer = setInterval(function () {
-        if (_this6.subtitleLines.length > 0) {
-          _this6.subtitleLines.splice(0, 1);
+        if (_this5.subtitleLines.length > 0) {
+          _this5.subtitleLines.splice(0, 1);
         }
-        if (_this6.subtitleLines.length === 0) {
-          _this6.clearScrollTimer();
+        if (_this5.subtitleLines.length === 0) {
+          _this5.clearScrollTimer();
         }
       }, 3000);
     },
@@ -383,7 +387,7 @@ var _default = {
     },
     // ==================== 波形绘制 ====================
     startDraw: function startDraw() {
-      var _this7 = this;
+      var _this6 = this;
       var ctx = uni.createCanvasContext('waveLine', this);
       // 获取画布实际尺寸（rpx转px近似）
       var W = uni.getSystemInfoSync().windowWidth;
@@ -391,13 +395,13 @@ var _default = {
       var draw = function draw() {
         ctx.clearRect(0, 0, W, H);
         var mid = H / 2;
-        var nv = _this7.volume / 100;
+        var nv = _this6.volume / 100;
         var time = Date.now() / 1000;
 
         // 主线
         ctx.beginPath();
         ctx.setLineWidth(2);
-        ctx.setStrokeStyle(_this7.state === 'ai_speaking' ? 'rgba(233,69,96,0.7)' : 'rgba(180,180,200,0.4)');
+        ctx.setStrokeStyle(_this6.state === 'ai_speaking' ? 'rgba(233,69,96,0.7)' : 'rgba(180,180,200,0.4)');
         for (var x = 0; x < W; x++) {
           var ratio = x / W;
           // 多频叠加
@@ -413,7 +417,7 @@ var _default = {
         ctx.stroke();
 
         // AI说话时加一条细辉光线
-        if (_this7.state === 'ai_speaking' && nv > 0.05) {
+        if (_this6.state === 'ai_speaking' && nv > 0.05) {
           ctx.beginPath();
           ctx.setLineWidth(4);
           ctx.setStrokeStyle('rgba(233,69,96,0.12)');
@@ -431,43 +435,43 @@ var _default = {
     },
     // ==================== 核心流程 ====================
     startVoiceSession: function startVoiceSession() {
-      var _this8 = this;
+      var _this7 = this;
       this.state = 'connecting';
       (0, _audioPlayer.initPlayer)(function (vol) {
-        _this8.volume = vol;
+        _this7.volume = vol;
       });
       (0, _doubaoClient.connect)({
         onConnectionReady: function onConnectionReady() {},
         onBlocked: function onBlocked(msg) {
           console.log('[Main] 被限流，显示滚');
-          _this8.isBlocked = true;
-          _this8.ended = true;
-          _this8.cleanup();
+          _this7.isBlocked = true;
+          _this7.ended = true;
+          _this7.cleanup();
         },
         onSessionStarted: function onSessionStarted(data) {
-          _this8.state = 'processing';
+          _this7.state = 'processing';
           // 从后端获取开场情景
           (0, _crypto.secureRequest)({
             url: _config.default.API_BASE + '/api/config/opening',
             method: 'GET',
             success: function success(res) {
               var scene = res.data && res.data.data || '[你看着对方沉默不语，积攒的情绪开始翻涌]';
-              _this8.sceneKey = scene;
+              _this7.sceneKey = scene;
               (0, _doubaoClient.sendTextQuery)(scene);
             },
             fail: function fail() {
               var scene = '[你看着对方沉默不语，积攒的情绪开始翻涌]';
-              _this8.sceneKey = scene;
+              _this7.sceneKey = scene;
               (0, _doubaoClient.sendTextQuery)(scene);
             }
           });
           // 启动超时定时器
-          _this8.startEndTimer();
+          _this7.startEndTimer();
         },
         onAudioData: function onAudioData(audioBuffer) {
           (0, _audioPlayer.feedAudio)(audioBuffer);
           (0, _audioPlayer.collectFrame)(audioBuffer);
-          if (_this8.state !== 'ai_speaking') _this8.state = 'ai_speaking';
+          if (_this7.state !== 'ai_speaking') _this7.state = 'ai_speaking';
         },
         onASRStart: function onASRStart() {},
         onASRText: function onASRText() {},
@@ -475,82 +479,82 @@ var _default = {
         onTTSSentenceEnd: function onTTSSentenceEnd() {
           (0, _audioPlayer.flushSentence)();
           // 一句TTS音频发送完 → 显示下一条字幕
-          _this8.showNextSubtitle();
+          _this7.showNextSubtitle();
         },
         onChatText: function onChatText(text) {
-          _this8.currentRoundText += text;
+          _this7.currentRoundText += text;
           // 拆句入队（自动过滤括号内容）
-          _this8.splitAndQueue(text);
+          _this7.splitAndQueue(text);
           // 发送了最后一句后，监听AI文本内容是否包含"滚"
-          if (_this8.finalSent) {
-            _this8.chatAccum += text;
-            if (_this8.chatAccum.includes('滚')) {
+          if (_this7.finalSent) {
+            _this7.chatAccum += text;
+            if (_this7.chatAccum.includes('滚')) {
               console.log('[Main] 检测到AI说了"滚"，标记结束');
-              _this8.gotFinalText = true;
+              _this7.gotFinalText = true;
             }
           }
         },
         onTTSStart: function onTTSStart(data) {
-          _this8.clearSilenceTimer();
-          _this8.clearMaxReplayTimer();
-          _this8.currentRoundText = '';
-          _this8.subtitleBuffer = '';
-          _this8.subtitleQueue = [];
-          _this8.clearScrollTimer();
-          _this8.state = 'ai_speaking';
+          _this7.clearSilenceTimer();
+          _this7.clearMaxReplayTimer();
+          _this7.currentRoundText = '';
+          _this7.subtitleBuffer = '';
+          _this7.subtitleQueue = [];
+          _this7.clearScrollTimer();
+          _this7.state = 'ai_speaking';
         },
         onTTSEnd: function onTTSEnd(data) {
-          _this8.state = 'listening';
-          _this8.volume = 0;
+          _this7.state = 'listening';
+          _this7.volume = 0;
           // 把剩余buffer入队并显示
-          if (_this8.subtitleBuffer.trim()) {
-            _this8.subtitleQueue.push(_this8.subtitleBuffer.trim());
-            _this8.subtitleBuffer = '';
+          if (_this7.subtitleBuffer.trim()) {
+            _this7.subtitleQueue.push(_this7.subtitleBuffer.trim());
+            _this7.subtitleBuffer = '';
           }
-          while (_this8.subtitleQueue.length > 0) {
-            _this8.showNextSubtitle();
+          while (_this7.subtitleQueue.length > 0) {
+            _this7.showNextSubtitle();
           }
           (0, _audioPlayer.archiveCurrentRound)();
-          _this8.roundTexts.push(_this8.currentRoundText);
-          _this8.currentRoundText = '';
+          _this7.roundTexts.push(_this7.currentRoundText);
+          _this7.currentRoundText = '';
           // AI已说出"滚" → 等所有缓冲音频播完 → 显示滚 → 结束
-          if (_this8.gotFinalText) {
-            if (_this8._finalSafetyTimer) {
-              clearTimeout(_this8._finalSafetyTimer);
-              _this8._finalSafetyTimer = null;
+          if (_this7.gotFinalText) {
+            if (_this7._finalSafetyTimer) {
+              clearTimeout(_this7._finalSafetyTimer);
+              _this7._finalSafetyTimer = null;
             }
-            _this8.normalEnded = true;
+            _this7.normalEnded = true;
             (0, _audioPlayer.waitPlaybackEnd)(function () {
               (0, _audioPlayer.stopReplay)();
-              _this8.uploadCache();
-              _this8.ended = true;
-              _this8.cleanup();
+              _this7.uploadCache();
+              _this7.ended = true;
+              _this7.cleanup();
             });
             return;
           }
           // Max复播：6s后随机播一段历史
-          if (_this8.maxMode) {
-            _this8.clearMaxReplayTimer();
-            _this8.maxReplayTimer = setTimeout(function () {
-              if (_this8.maxMode && !_this8.ended) (0, _audioPlayer.replayRandom)();
+          if (_this7.maxMode) {
+            _this7.clearMaxReplayTimer();
+            _this7.maxReplayTimer = setTimeout(function () {
+              if (_this7.maxMode && !_this7.ended) (0, _audioPlayer.replayRandom)();
             }, 6000);
           }
           // 正常循环（内部判断ending，发最后一句）
-          _this8.scheduleSilencePrompt();
+          _this7.scheduleSilencePrompt();
         },
         onError: function onError(err) {
           console.error('[错误]', err);
-          _this8.state = 'listening';
-          _this8.scheduleSilencePrompt();
+          _this7.state = 'listening';
+          _this7.scheduleSilencePrompt();
         },
         onDisconnect: function onDisconnect() {
-          _this8.state = 'idle';
-          _this8.clearSilenceTimer();
+          _this7.state = 'idle';
+          _this7.clearSilenceTimer();
         }
       }, this.deviceId);
     },
     scheduleSilencePrompt: function scheduleSilencePrompt() {
-      var _this9 = this;
+      var _this8 = this;
       this.clearSilenceTimer();
       // 超时且还没发过最后一句 → 发结束语
       if (this.ending && !this.finalSent) {
@@ -561,10 +565,10 @@ var _default = {
         this.state = 'processing';
         // 兜底：20秒AI没说出"滚"就直接结束
         this._finalSafetyTimer = setTimeout(function () {
-          if (!_this9.ended) {
+          if (!_this8.ended) {
             console.log('[Main] 结束语超时兜底');
-            _this9.ended = true;
-            _this9.cleanup();
+            _this8.ended = true;
+            _this8.cleanup();
           }
         }, 20000);
         return;
@@ -573,21 +577,21 @@ var _default = {
       if (this.finalSent) return;
       // 正常沉默循环
       this.silenceTimer = setTimeout(function () {
-        if (!(0, _doubaoClient.isActive)() || _this9.ending) return;
+        if (!(0, _doubaoClient.isActive)() || _this8.ending) return;
         (0, _crypto.secureRequest)({
           url: _config.default.API_BASE + '/api/config/silence',
           method: 'GET',
           success: function success(res) {
-            if (!(0, _doubaoClient.isActive)() || _this9.ending) return;
+            if (!(0, _doubaoClient.isActive)() || _this8.ending) return;
             var ctx = res.data && res.data.data || SILENCE_FALLBACK;
             console.log('[Main] 发送沉默语境:', ctx);
             (0, _doubaoClient.sendTextQuery)(ctx);
-            _this9.state = 'processing';
+            _this8.state = 'processing';
           },
           fail: function fail() {
-            if (!(0, _doubaoClient.isActive)() || _this9.ending) return;
+            if (!(0, _doubaoClient.isActive)() || _this8.ending) return;
             (0, _doubaoClient.sendTextQuery)(SILENCE_FALLBACK);
-            _this9.state = 'processing';
+            _this8.state = 'processing';
           }
         });
       }, SILENCE_DELAY_MS);
@@ -637,7 +641,7 @@ var _default = {
     },
     // ==================== 缓存回放模式 ====================
     tryCacheOrLive: function tryCacheOrLive() {
-      var _this10 = this;
+      var _this9 = this;
       // 先尝试从服务端获取缓存（服务端决定概率+去重）
       (0, _crypto.secureRequest)({
         url: _config.default.API_BASE + '/api/cache/random',
@@ -648,35 +652,35 @@ var _default = {
         success: function success(res) {
           if (res.statusCode === 200 && res.data && res.data.code === 0 && res.data.data) {
             console.log('[Main] 服务端分配缓存回放');
-            _this10.startCachePlayback(res.data.data);
+            _this9.startCachePlayback(res.data.data);
           } else {
             console.log('[Main] 服务端未分配缓存，走实时模式');
-            _this10.startVoiceSession();
+            _this9.startVoiceSession();
           }
         },
         fail: function fail() {
           console.log('[Main] 请求缓存失败，走实时模式');
-          _this10.startVoiceSession();
+          _this9.startVoiceSession();
         }
       });
     },
     startCachePlayback: function startCachePlayback(cache) {
-      var _this11 = this;
+      var _this10 = this;
       var rounds = cache.rounds || [];
       console.log('[Main] 缓存回放启动, sceneKey:', (cache.sceneKey || '').substring(0, 30), '共', rounds.length, '轮');
       this.state = 'processing';
       (0, _audioPlayer.initPlayer)(function (vol) {
-        _this11.volume = vol;
+        _this10.volume = vol;
       });
       this.playCacheRounds(rounds, 0);
     },
     playCacheRounds: function playCacheRounds(rounds, index) {
-      var _this12 = this;
+      var _this11 = this;
       if (index >= rounds.length || this.ended) {
         // 全部播完，显示"滚"
         (0, _audioPlayer.waitPlaybackEnd)(function () {
-          _this12.ended = true;
-          _this12.cleanup();
+          _this11.ended = true;
+          _this11.cleanup();
         });
         return;
       }
@@ -717,7 +721,7 @@ var _default = {
         if (cacheSubtitles.length > 1) {
           segTimer = setInterval(function () {
             if (segIdx < cacheSubtitles.length) {
-              _this12.pushSubtitleLine(cacheSubtitles[segIdx]);
+              _this11.pushSubtitleLine(cacheSubtitles[segIdx]);
               segIdx++;
             } else {
               clearInterval(segTimer);
@@ -730,17 +734,17 @@ var _default = {
       var frameSize = 2400 * 2; // 16bit = 2 bytes per sample
       var offset = 0;
       var feedInterval = setInterval(function () {
-        if (offset >= pcmData.byteLength || _this12.ended) {
+        if (offset >= pcmData.byteLength || _this11.ended) {
           clearInterval(feedInterval);
           if (segTimer) clearInterval(segTimer);
           // 当前轮播完，等音频flush后播下一轮
           (0, _audioPlayer.waitPlaybackEnd)(function () {
-            _this12.state = 'listening';
-            _this12.volume = 0;
-            _this12.subtitleLines = [];
+            _this11.state = 'listening';
+            _this11.volume = 0;
+            _this11.subtitleLines = [];
             // 轮间间隔 1-2s
             setTimeout(function () {
-              _this12.playCacheRounds(rounds, index + 1);
+              _this11.playCacheRounds(rounds, index + 1);
             }, 1000 + Math.random() * 1000);
           });
           return;
@@ -756,18 +760,18 @@ var _default = {
     },
     // ==================== 超时结束 ====================
     startEndTimer: function startEndTimer() {
-      var _this13 = this;
+      var _this12 = this;
       var cfg = (0, _doubaoClient.getConfig)();
       var timeoutMin = cfg ? cfg.timeoutMinutes : 5;
       var ms = timeoutMin * 60 * 1000;
       console.log('[Main] 会话将在', timeoutMin, '分钟后结束');
       this.endTimer = setTimeout(function () {
         console.log('[Main] 超时，标记ending');
-        _this13.ending = true;
-        _this13.clearSilenceTimer();
+        _this12.ending = true;
+        _this12.clearSilenceTimer();
         // 如果当前空闲，走scheduleSilencePrompt发结束语
-        if (_this13.state === 'listening' || _this13.state === 'idle') {
-          _this13.scheduleSilencePrompt();
+        if (_this12.state === 'listening' || _this12.state === 'idle') {
+          _this12.scheduleSilencePrompt();
         }
         // 如果ai_speaking或processing，等onTTSEnd自然触发scheduleSilencePrompt
       }, ms);

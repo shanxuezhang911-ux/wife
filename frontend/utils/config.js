@@ -4,14 +4,12 @@
  * 前端启动时从 GET /api/config/session 拉取
  */
 
-//const SERVER_IP = '10.0.49.94'
-const SERVER_IP = '49.232.184.74'
-
+const SERVER_DOMAIN = 'www.zsx.asia'
 
 export default {
   // ==================== 服务器地址 ====================
-  API_BASE: `http://${SERVER_IP}:9001`,
-  WS_URL: `ws://${SERVER_IP}:9001/ws/doubao`,
+  API_BASE: `https://${SERVER_DOMAIN}:9001`,
+  WS_URL: `wss://${SERVER_DOMAIN}:9001/ws/doubao`,
 
   // ==================== 音频配置（纯本地） ====================
   AUDIO: {

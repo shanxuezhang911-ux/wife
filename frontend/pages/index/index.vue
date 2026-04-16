@@ -118,20 +118,20 @@ export default {
   },
 
   onReady() {
+    this._sessionStarted = true
     this.initSession()
   },
 
   onShow() {
     if (this._navigatingAway) return
+    // 首次加载时onShow先于onReady执行，此时不应初始化
+    if (!this._sessionStarted) return
     // 从后台恢复：已结束 或 豆包已断开 → 全部重来
     if (this.ended || !isActive()) {
       console.log('[启动] onShow重新初始化, ended=' + this.ended + ', isActive=' + isActive())
       this.cleanup()
       this.resetState()
-      // 等旧连接彻底关闭后再启动新会话
-      setTimeout(() => {
-        this.initSession()
-      }, 600)
+      this.initSession()
     }
   },
 
@@ -178,6 +178,13 @@ export default {
         }
       }).catch((err) => {
         console.error('[启动] 拉取配置失败', err)
+        // #ifdef MP-WEIXIN
+        uni.showModal({
+          title: '连接失败',
+          content: '无法连接服务器，请检查网络。非调试模式需HTTPS+域名。',
+          showCancel: false
+        })
+        // #endif
         this.ended = true
       })
     },
