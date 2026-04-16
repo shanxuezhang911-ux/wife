@@ -5,36 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="54f54cc3-c539-487a-a0a7-c9d6ed7840e3" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/wife/server/controller/FaviconController.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/resources/static/gm/favicon.ico" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/8.7/checksums/checksums.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.7/checksums/checksums.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/8.7/executionHistory/executionHistory.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.7/executionHistory/executionHistory.bin" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/8.7/executionHistory/executionHistory.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.7/executionHistory/executionHistory.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/8.7/fileHashes/fileHashes.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.7/fileHashes/fileHashes.bin" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/8.7/fileHashes/fileHashes.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.7/fileHashes/fileHashes.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/8.7/fileHashes/resourceHashesCache.bin" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/8.7/fileHashes/resourceHashesCache.bin" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gradle/file-system.probe" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/file-system.probe" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/classes/java/main/com/wife/server/websocket/DoubaoProxyHandler$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/build/classes/java/main/com/wife/server/websocket/DoubaoProxyHandler$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/classes/java/main/com/wife/server/websocket/DoubaoProxyHandler.class" beforeDir="false" afterPath="$PROJECT_DIR$/build/classes/java/main/com/wife/server/websocket/DoubaoProxyHandler.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/libs/wife-server-1.0.0-plain.jar" beforeDir="false" afterPath="$PROJECT_DIR$/build/libs/wife-server-1.0.0-plain.jar" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/libs/wife-server-1.0.0.jar" beforeDir="false" afterPath="$PROJECT_DIR$/build/libs/wife-server-1.0.0.jar" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/resources/main/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/build/resources/main/application.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/previous-compilation-data.bin" beforeDir="false" afterPath="$PROJECT_DIR$/build/tmp/compileJava/previous-compilation-data.bin" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/wife/server/websocket/DoubaoProxyHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/wife/server/websocket/DoubaoProxyHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/application.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/pages/about/about.vue" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/pages/about/about.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/pages/index/index.vue" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/pages/index/index.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/common/main.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/common/main.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/common/vendor.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/common/vendor.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/pages/about/about.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/pages/about/about.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/pages/index/index.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/.sourcemap/mp-weixin/pages/index/index.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/common/vendor.js" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/common/vendor.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.js" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.wxss" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/about/about.wxss" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/index/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/unpackage/dist/dev/mp-weixin/pages/index/index.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../frontend/utils/doubao-client.js" beforeDir="false" afterPath="$PROJECT_DIR$/../frontend/utils/doubao-client.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gradle/wrapper/gradle-wrapper.properties" beforeDir="false" afterPath="$PROJECT_DIR$/gradle/wrapper/gradle-wrapper.properties" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
