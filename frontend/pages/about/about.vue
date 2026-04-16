@@ -80,6 +80,7 @@
 
 <script>
 import CONFIG from '../../utils/config.js'
+import { secureRequest } from '../../utils/crypto.js'
 export default {
   data() {
     return {
@@ -101,7 +102,7 @@ export default {
       })
     },
     getSponsorList() {
-      uni.request({
+      secureRequest({
         url: CONFIG.API_BASE + '/api/sponsors',
         method: 'GET',
         success: res => {

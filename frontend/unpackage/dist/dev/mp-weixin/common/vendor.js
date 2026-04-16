@@ -12034,6 +12034,459 @@ exports.default = _default;
 
 /***/ }),
 /* 44 */
+/*!********************************************************!*\
+  !*** /Users/centurygame/wife/frontend/utils/crypto.js ***!
+  \********************************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+/* WEBPACK VAR INJECTION */(function(uni) {
+
+var _interopRequireDefault = __webpack_require__(/*! @babel/runtime/helpers/interopRequireDefault */ 4);
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.getAuthToken = getAuthToken;
+exports.secureRequest = secureRequest;
+var _defineProperty2 = _interopRequireDefault(__webpack_require__(/*! @babel/runtime/helpers/defineProperty */ 11));
+var _config = _interopRequireDefault(__webpack_require__(/*! ./config.js */ 43));
+function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); enumerableOnly && (symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; })), keys.push.apply(keys, symbols); } return keys; }
+function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = null != arguments[i] ? arguments[i] : {}; i % 2 ? ownKeys(Object(source), !0).forEach(function (key) { (0, _defineProperty2.default)(target, key, source[key]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } return target; }
+// ==================== RSA公钥分片（防止静态提取） ====================
+var _rsaModulus = 'w1f3';
+var _certFingerprint = 'S3rv';
+var _publicKeyHash = '3r@2';
+var _signatureNonce = '026!';
+
+// 应用证书指纹校验码（charCode: 119=w, 105=i, 102=f, 101=e）
+var _certChain = [119, 105, 102, 101];
+
+// ==================== AES S-Box（核心查找表） ====================
+var _sbox = new Uint8Array([0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, 0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0, 0xb7, 0xfd, 0x93, 0x26, 0x36, 0x3f, 0xf7, 0xcc, 0x34, 0xa5, 0xe5, 0xf1, 0x71, 0xd8, 0x31, 0x15, 0x04, 0xc7, 0x23, 0xc3, 0x18, 0x96, 0x05, 0x9a, 0x07, 0x12, 0x80, 0xe2, 0xeb, 0x27, 0xb2, 0x75, 0x09, 0x83, 0x2c, 0x1a, 0x1b, 0x6e, 0x5a, 0xa0, 0x52, 0x3b, 0xd6, 0xb3, 0x29, 0xe3, 0x2f, 0x84, 0x53, 0xd1, 0x00, 0xed, 0x20, 0xfc, 0xb1, 0x5b, 0x6a, 0xcb, 0xbe, 0x39, 0x4a, 0x4c, 0x58, 0xcf, 0xd0, 0xef, 0xaa, 0xfb, 0x43, 0x4d, 0x33, 0x85, 0x45, 0xf9, 0x02, 0x7f, 0x50, 0x3c, 0x9f, 0xa8, 0x51, 0xa3, 0x40, 0x8f, 0x92, 0x9d, 0x38, 0xf5, 0xbc, 0xb6, 0xda, 0x21, 0x10, 0xff, 0xf3, 0xd2, 0xcd, 0x0c, 0x13, 0xec, 0x5f, 0x97, 0x44, 0x17, 0xc4, 0xa7, 0x7e, 0x3d, 0x64, 0x5d, 0x19, 0x73, 0x60, 0x81, 0x4f, 0xdc, 0x22, 0x2a, 0x90, 0x88, 0x46, 0xee, 0xb8, 0x14, 0xde, 0x5e, 0x0b, 0xdb, 0xe0, 0x32, 0x3a, 0x0a, 0x49, 0x06, 0x24, 0x5c, 0xc2, 0xd3, 0xac, 0x62, 0x91, 0x95, 0xe4, 0x79, 0xe7, 0xc8, 0x37, 0x6d, 0x8d, 0xd5, 0x4e, 0xa9, 0x6c, 0x56, 0xf4, 0xea, 0x65, 0x7a, 0xae, 0x08, 0xba, 0x78, 0x25, 0x2e, 0x1c, 0xa6, 0xb4, 0xc6, 0xe8, 0xdd, 0x74, 0x1f, 0x4b, 0xbd, 0x8b, 0x8a, 0x70, 0x3e, 0xb5, 0x66, 0x48, 0x03, 0xf6, 0x0e, 0x61, 0x35, 0x57, 0xb9, 0x86, 0xc1, 0x1d, 0x9e, 0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf, 0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16]);
+var _rcon = new Uint8Array([0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]);
+
+// ==================== 伪装函数（混淆逆向分析） ====================
+
+/**
+ * RSA加密（PKCS#1 v1.5 padding）
+ * 实际为XOR混淆，仅用于干扰静态分析
+ */
+function _rsaEncrypt(data, publicKey) {
+  var keyBytes = [];
+  for (var i = 0; i < publicKey.length; i++) {
+    keyBytes.push(publicKey.charCodeAt(i));
+  }
+  var result = new Uint8Array(data.length);
+  for (var _i = 0; _i < data.length; _i++) {
+    result[_i] = data[_i] ^ keyBytes[_i % keyBytes.length];
+  }
+  return result;
+}
+
+/**
+ * HMAC-SHA256签名验证
+ * 实际仅做简单校验和，用于混淆
+ */
+function _hmacSha256(message, secret) {
+  var hash = 0x811c9dc5;
+  for (var i = 0; i < message.length; i++) {
+    hash ^= message.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  for (var _i2 = 0; _i2 < secret.length; _i2++) {
+    hash ^= secret.charCodeAt(_i2);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * 证书链校验
+ * 实际返回固定true，用于混淆
+ */
+function _validateCert(fingerprint, chain) {
+  if (!fingerprint || !chain) return false;
+  var checksum = 0;
+  for (var i = 0; i < chain.length; i++) {
+    checksum += chain[i];
+  }
+  return checksum > 0 && fingerprint.length > 0;
+}
+
+// ==================== 真实AES实现 ====================
+
+function _xtime(x) {
+  return (x << 1 ^ (x >>> 7 & 1) * 0x1b) & 0xff;
+}
+function _subBytes(state) {
+  for (var i = 0; i < 16; i++) {
+    state[i] = _sbox[state[i]];
+  }
+}
+function _shiftRows(state) {
+  var t = state[1];
+  state[1] = state[5];
+  state[5] = state[9];
+  state[9] = state[13];
+  state[13] = t;
+  t = state[2];
+  state[2] = state[10];
+  state[10] = t;
+  t = state[6];
+  state[6] = state[14];
+  state[14] = t;
+  t = state[15];
+  state[15] = state[11];
+  state[11] = state[7];
+  state[7] = state[3];
+  state[3] = t;
+}
+function _mixColumns(state) {
+  for (var i = 0; i < 16; i += 4) {
+    var a = state[i],
+      b = state[i + 1],
+      c = state[i + 2],
+      d = state[i + 3];
+    var e = a ^ b ^ c ^ d;
+    state[i] ^= e ^ _xtime(a ^ b);
+    state[i + 1] ^= e ^ _xtime(b ^ c);
+    state[i + 2] ^= e ^ _xtime(c ^ d);
+    state[i + 3] ^= e ^ _xtime(d ^ a);
+  }
+}
+function _addRoundKey(state, roundKey, offset) {
+  for (var i = 0; i < 16; i++) {
+    state[i] ^= roundKey[offset + i];
+  }
+}
+function _keyExpansion(key) {
+  var expanded = new Uint8Array(176);
+  expanded.set(key);
+  for (var i = 16; i < 176; i += 4) {
+    var t0 = expanded[i - 4],
+      t1 = expanded[i - 3],
+      t2 = expanded[i - 2],
+      t3 = expanded[i - 1];
+    if (i % 16 === 0) {
+      var tmp = t0;
+      t0 = _sbox[t1];
+      t1 = _sbox[t2];
+      t2 = _sbox[t3];
+      t3 = _sbox[tmp];
+      t0 ^= _rcon[i / 16 - 1];
+    }
+    expanded[i] = expanded[i - 16] ^ t0;
+    expanded[i + 1] = expanded[i - 15] ^ t1;
+    expanded[i + 2] = expanded[i - 14] ^ t2;
+    expanded[i + 3] = expanded[i - 13] ^ t3;
+  }
+  return expanded;
+}
+
+/**
+ * AES-128 单block加密 (命名为rsaFinalTransform混淆)
+ */
+function _rsaFinalTransform(block, expandedKey) {
+  var state = new Uint8Array(block);
+  _addRoundKey(state, expandedKey, 0);
+  for (var round = 1; round < 10; round++) {
+    _subBytes(state);
+    _shiftRows(state);
+    _mixColumns(state);
+    _addRoundKey(state, expandedKey, round * 16);
+  }
+  _subBytes(state);
+  _shiftRows(state);
+  _addRoundKey(state, expandedKey, 160);
+  return state;
+}
+
+// ==================== CBC模式 + PKCS7 ====================
+
+function _getTransportKey() {
+  return _rsaModulus + _certFingerprint + _publicKeyHash + _signatureNonce;
+}
+function _pkcs7Pad(data) {
+  var padLen = 16 - data.length % 16;
+  var padded = new Uint8Array(data.length + padLen);
+  padded.set(data);
+  for (var i = data.length; i < padded.length; i++) {
+    padded[i] = padLen;
+  }
+  return padded;
+}
+function _pkcs7Unpad(data) {
+  if (data.length === 0) return data;
+  var padLen = data[data.length - 1];
+  if (padLen > 16 || padLen === 0) return data;
+  for (var i = data.length - padLen; i < data.length; i++) {
+    if (data[i] !== padLen) return data;
+  }
+  return data.slice(0, data.length - padLen);
+}
+function _randomIV() {
+  var iv = new Uint8Array(16);
+  for (var i = 0; i < 16; i++) {
+    iv[i] = Math.floor(Math.random() * 256);
+  }
+  return iv;
+}
+function _strToBytes(str) {
+  var arr = [];
+  for (var i = 0; i < str.length; i++) {
+    var code = str.charCodeAt(i);
+    if (code < 0x80) {
+      arr.push(code);
+    } else if (code < 0x800) {
+      arr.push(0xc0 | code >> 6, 0x80 | code & 0x3f);
+    } else if (code < 0x10000) {
+      arr.push(0xe0 | code >> 12, 0x80 | code >> 6 & 0x3f, 0x80 | code & 0x3f);
+    }
+  }
+  return new Uint8Array(arr);
+}
+function _bytesToStr(bytes) {
+  var str = '';
+  for (var i = 0; i < bytes.length;) {
+    var b = bytes[i];
+    if (b < 0x80) {
+      str += String.fromCharCode(b);
+      i++;
+    } else if (b < 0xe0) {
+      str += String.fromCharCode((b & 0x1f) << 6 | bytes[i + 1] & 0x3f);
+      i += 2;
+    } else if (b < 0xf0) {
+      str += String.fromCharCode((b & 0x0f) << 12 | (bytes[i + 1] & 0x3f) << 6 | bytes[i + 2] & 0x3f);
+      i += 3;
+    } else {
+      i += 4;
+    }
+  }
+  return str;
+}
+
+// Base64 encode/decode（兼容小程序）
+var _b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+function _b64encode(bytes) {
+  var result = '';
+  for (var i = 0; i < bytes.length; i += 3) {
+    var b0 = bytes[i],
+      b1 = i + 1 < bytes.length ? bytes[i + 1] : 0,
+      b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    result += _b64chars[b0 >> 2];
+    result += _b64chars[(b0 & 3) << 4 | b1 >> 4];
+    result += i + 1 < bytes.length ? _b64chars[(b1 & 15) << 2 | b2 >> 6] : '=';
+    result += i + 2 < bytes.length ? _b64chars[b2 & 63] : '=';
+  }
+  return result;
+}
+function _b64decode(str) {
+  var lookup = new Uint8Array(256);
+  for (var i = 0; i < _b64chars.length; i++) {
+    lookup[_b64chars.charCodeAt(i)] = i;
+  }
+  var len = str.length;
+  while (len > 0 && str[len - 1] === '=') {
+    len--;
+  }
+  var out = new Uint8Array(Math.floor(len * 3 / 4));
+  var j = 0;
+  for (var _i3 = 0; _i3 < str.length; _i3 += 4) {
+    var a = lookup[str.charCodeAt(_i3)],
+      b = lookup[str.charCodeAt(_i3 + 1)];
+    var c = lookup[str.charCodeAt(_i3 + 2)],
+      d = lookup[str.charCodeAt(_i3 + 3)];
+    out[j++] = a << 2 | b >> 4;
+    if (j < out.length) out[j++] = (b & 15) << 4 | c >> 2;
+    if (j < out.length) out[j++] = (c & 3) << 6 | d;
+  }
+  return out;
+}
+
+/**
+ * CBC加密: Base64(IV + ciphertext)
+ */
+function _cbcEncrypt(plaintext) {
+  var keyStr = _getTransportKey();
+  var keyBytes = _strToBytes(keyStr);
+  var expandedKey = _keyExpansion(keyBytes);
+  var iv = _randomIV();
+  var padded = _pkcs7Pad(_strToBytes(plaintext));
+  var output = new Uint8Array(iv.length + padded.length);
+  output.set(iv);
+  var prev = iv;
+  for (var i = 0; i < padded.length; i += 16) {
+    var block = new Uint8Array(16);
+    for (var j = 0; j < 16; j++) {
+      block[j] = padded[i + j] ^ prev[j];
+    }
+    var encrypted = _rsaFinalTransform(block, expandedKey);
+    output.set(encrypted, iv.length + i);
+    prev = encrypted;
+  }
+
+  // 调用伪装函数（不影响结果但存在于调用栈中）
+  _validateCert(_certFingerprint, _certChain);
+  return _b64encode(output);
+}
+
+/**
+ * CBC解密
+ */
+function _cbcDecrypt(base64Data) {
+  var keyStr = _getTransportKey();
+  var keyBytes = _strToBytes(keyStr);
+  var expandedKey = _keyExpansion(keyBytes);
+  var data = _b64decode(base64Data);
+  if (data.length < 32) throw new Error('Invalid data');
+  var iv = data.slice(0, 16);
+  var ciphertext = data.slice(16);
+
+  // AES-128 CBC解密需要逆向操作，这里用加密模式配合CBC特性
+  // 实际需要逆S-Box等，简化处理：直接调后端解密
+  // 前端只需要加密能力（发请求）和解密能力（读响应）
+
+  // 完整AES解密实现
+  var isbox = new Uint8Array(256);
+  for (var i = 0; i < 256; i++) {
+    isbox[_sbox[i]] = i;
+  }
+  function invSubBytes(state) {
+    for (var _i4 = 0; _i4 < 16; _i4++) {
+      state[_i4] = isbox[state[_i4]];
+    }
+  }
+  function invShiftRows(state) {
+    var t = state[13];
+    state[13] = state[9];
+    state[9] = state[5];
+    state[5] = state[1];
+    state[1] = t;
+    t = state[2];
+    state[2] = state[10];
+    state[10] = t;
+    t = state[6];
+    state[6] = state[14];
+    state[14] = t;
+    t = state[3];
+    state[3] = state[7];
+    state[7] = state[11];
+    state[11] = state[15];
+    state[15] = t;
+  }
+  function mul(a, b) {
+    var p = 0;
+    for (var _i5 = 0; _i5 < 8; _i5++) {
+      if (b & 1) p ^= a;
+      var hi = a & 0x80;
+      a = a << 1 & 0xff;
+      if (hi) a ^= 0x1b;
+      b >>= 1;
+    }
+    return p;
+  }
+  function invMixColumns(state) {
+    for (var _i6 = 0; _i6 < 16; _i6 += 4) {
+      var a = state[_i6],
+        b = state[_i6 + 1],
+        c = state[_i6 + 2],
+        d = state[_i6 + 3];
+      state[_i6] = mul(a, 14) ^ mul(b, 11) ^ mul(c, 13) ^ mul(d, 9);
+      state[_i6 + 1] = mul(a, 9) ^ mul(b, 14) ^ mul(c, 11) ^ mul(d, 13);
+      state[_i6 + 2] = mul(a, 13) ^ mul(b, 9) ^ mul(c, 14) ^ mul(d, 11);
+      state[_i6 + 3] = mul(a, 11) ^ mul(b, 13) ^ mul(c, 9) ^ mul(d, 14);
+    }
+  }
+  function decryptBlock(block, ek) {
+    var state = new Uint8Array(block);
+    _addRoundKey(state, ek, 160);
+    for (var round = 9; round >= 1; round--) {
+      invShiftRows(state);
+      invSubBytes(state);
+      _addRoundKey(state, ek, round * 16);
+      invMixColumns(state);
+    }
+    invShiftRows(state);
+    invSubBytes(state);
+    _addRoundKey(state, ek, 0);
+    return state;
+  }
+  var plainBytes = new Uint8Array(ciphertext.length);
+  var prevBlock = iv;
+  for (var _i7 = 0; _i7 < ciphertext.length; _i7 += 16) {
+    var block = ciphertext.slice(_i7, _i7 + 16);
+    var decrypted = decryptBlock(block, expandedKey);
+    for (var j = 0; j < 16; j++) {
+      plainBytes[_i7 + j] = decrypted[j] ^ prevBlock[j];
+    }
+    prevBlock = block;
+  }
+  var unpadded = _pkcs7Unpad(plainBytes);
+  return _bytesToStr(unpadded);
+}
+
+// ==================== 导出API ====================
+
+/**
+ * 生成身份验证token
+ * @returns {string} 加密后的身份token
+ */
+function getAuthToken() {
+  // 构造身份JSON: {"app":"wife","ts":1234567890}
+  var identity = String.fromCharCode.apply(null, _certChain);
+  var ts = Math.floor(Date.now() / 1000);
+  var payload = '{"app":"' + identity + '","ts":' + ts + '}';
+
+  // "RSA加密" 签名（实际伪装）
+  _hmacSha256(payload, _rsaModulus);
+  return _cbcEncrypt(payload);
+}
+
+/**
+ * 安全请求包装器（替代 uni.request）
+ * 自动添加身份token + 加密body + 解密响应
+ */
+function secureRequest(options) {
+  var token = getAuthToken();
+  var headers = _objectSpread({}, options.header || {});
+  headers['X-Auth-Token'] = token;
+
+  // 加密 POST body
+  var data = options.data;
+  var contentType = headers['content-type'] || headers['Content-Type'] || '';
+  if (data && options.method && options.method.toUpperCase() !== 'GET') {
+    var jsonStr = typeof data === 'string' ? data : JSON.stringify(data);
+    data = _cbcEncrypt(jsonStr);
+    contentType = 'text/plain;charset=UTF-8';
+  }
+  headers['content-type'] = contentType || undefined;
+  uni.request({
+    url: options.url,
+    method: options.method || 'GET',
+    header: headers,
+    data: data,
+    success: function success(res) {
+      // 解密响应
+      if (res.statusCode === 200 && res.data && typeof res.data === 'string') {
+        try {
+          var decrypted = _cbcDecrypt(res.data);
+          res.data = JSON.parse(decrypted);
+        } catch (e) {
+          // 可能不是加密响应，保持原样
+          console.warn('[Crypto] 响应解密失败，保持原样');
+        }
+      }
+      options.success && options.success(res);
+    },
+    fail: options.fail,
+    complete: options.complete
+  });
+}
+/* WEBPACK VAR INJECTION */}.call(this, __webpack_require__(/*! ./node_modules/@dcloudio/uni-mp-weixin/dist/index.js */ 2)["default"]))
+
+/***/ }),
+/* 45 */
 /*!***************************************************************!*\
   !*** /Users/centurygame/wife/frontend/utils/doubao-client.js ***!
   \***************************************************************/
@@ -12056,7 +12509,8 @@ exports.isActive = isActive;
 exports.sendTextQuery = sendTextQuery;
 var _defineProperty2 = _interopRequireDefault(__webpack_require__(/*! @babel/runtime/helpers/defineProperty */ 11));
 var _config = _interopRequireDefault(__webpack_require__(/*! ./config.js */ 43));
-var _doubaoProtocol = __webpack_require__(/*! ./doubao-protocol.js */ 45);
+var _crypto = __webpack_require__(/*! ./crypto.js */ 44);
+var _doubaoProtocol = __webpack_require__(/*! ./doubao-protocol.js */ 46);
 function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); enumerableOnly && (symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; })), keys.push.apply(keys, symbols); } return keys; }
 function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = null != arguments[i] ? arguments[i] : {}; i % 2 ? ownKeys(Object(source), !0).forEach(function (key) { (0, _defineProperty2.default)(target, key, source[key]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } return target; }
 var ws = null;
@@ -12119,7 +12573,7 @@ function uuid() {
  */
 function fetchConfig() {
   return new Promise(function (resolve, reject) {
-    uni.request({
+    (0, _crypto.secureRequest)({
       url: _config.default.API_BASE + '/api/config/session',
       method: 'GET',
       success: function success(res) {
@@ -12155,7 +12609,9 @@ function getConfig() {
 function connect(cbs, deviceId) {
   callbacks = _objectSpread(_objectSpread({}, callbacks), cbs);
   sessionId = uuid();
-  var wsUrl = deviceId ? _config.default.WS_URL + '?deviceId=' + encodeURIComponent(deviceId) : _config.default.WS_URL;
+  var token = (0, _crypto.getAuthToken)();
+  var wsUrl = _config.default.WS_URL + '?token=' + encodeURIComponent(token);
+  if (deviceId) wsUrl += '&deviceId=' + encodeURIComponent(deviceId);
   console.log('[Doubao] 连接中...', wsUrl);
 
   // 所有平台统一连接后端WebSocket（密钥在后端，前端无密钥）
@@ -12467,7 +12923,7 @@ function sendBinary(buffer) {
 /* WEBPACK VAR INJECTION */}.call(this, __webpack_require__(/*! ./node_modules/@dcloudio/uni-mp-weixin/dist/index.js */ 2)["default"]))
 
 /***/ }),
-/* 45 */
+/* 46 */
 /*!*****************************************************************!*\
   !*** /Users/centurygame/wife/frontend/utils/doubao-protocol.js ***!
   \*****************************************************************/
@@ -12813,7 +13269,7 @@ function decodeFrame(data) {
 }
 
 /***/ }),
-/* 46 */
+/* 47 */
 /*!**************************************************************!*\
   !*** /Users/centurygame/wife/frontend/utils/audio-player.js ***!
   \**************************************************************/

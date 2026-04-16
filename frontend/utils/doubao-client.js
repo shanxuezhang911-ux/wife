@@ -14,6 +14,7 @@
  */
 
 import CONFIG from './config.js'
+import { getAuthToken, secureRequest } from './crypto.js'
 import {
   encodeTextEvent,
   decodeFrame,
@@ -70,7 +71,7 @@ function uuid() {
  */
 export function fetchConfig() {
   return new Promise((resolve, reject) => {
-    uni.request({
+    secureRequest({
       url: CONFIG.API_BASE + '/api/config/session',
       method: 'GET',
       success: (res) => {
@@ -107,7 +108,9 @@ export function connect(cbs, deviceId) {
   callbacks = { ...callbacks, ...cbs }
   sessionId = uuid()
 
-  const wsUrl = deviceId ? CONFIG.WS_URL + '?deviceId=' + encodeURIComponent(deviceId) : CONFIG.WS_URL
+  const token = getAuthToken()
+  let wsUrl = CONFIG.WS_URL + '?token=' + encodeURIComponent(token)
+  if (deviceId) wsUrl += '&deviceId=' + encodeURIComponent(deviceId)
   console.log('[Doubao] 连接中...', wsUrl)
 
   // 所有平台统一连接后端WebSocket（密钥在后端，前端无密钥）

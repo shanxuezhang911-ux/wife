@@ -19,6 +19,7 @@
 
 <script>
 import CONFIG from '../../utils/config.js'
+import { secureRequest } from '../../utils/crypto.js'
 import { fetchConfig, getConfig, connect, sendTextQuery, disconnect, isActive } from '../../utils/doubao-client.js'
 import { initPlayer, feedAudio, flushSentence, stopPlayback, destroyPlayer, waitPlaybackEnd, collectFrame, archiveCurrentRound, replayRandom, stopReplay, clearHistory, getHistory } from '../../utils/audio-player.js'
 
@@ -286,7 +287,7 @@ export default {
         onSessionStarted: (data) => {
           this.state = 'processing'
           // 从后端获取开场情景
-          uni.request({
+          secureRequest({
             url: CONFIG.API_BASE + '/api/config/opening',
             method: 'GET',
             success: (res) => {
@@ -418,7 +419,7 @@ export default {
       // 正常沉默循环
       this.silenceTimer = setTimeout(() => {
         if (!isActive() || this.ending) return
-        uni.request({
+        secureRequest({
           url: CONFIG.API_BASE + '/api/config/silence',
           method: 'GET',
           success: (res) => {
@@ -456,7 +457,7 @@ export default {
       }
 
       console.log('[Main] 上报缓存, sceneKey:', this.sceneKey.substring(0, 30), '共', rounds.length, '轮')
-      uni.request({
+      secureRequest({
         url: CONFIG.API_BASE + '/api/cache/upload',
         method: 'POST',
         header: {
@@ -492,7 +493,7 @@ export default {
 
     tryCacheOrLive() {
       // 先尝试从服务端获取缓存（服务端决定概率+去重）
-      uni.request({
+      secureRequest({
         url: CONFIG.API_BASE + '/api/cache/random',
         method: 'GET',
         header: { 'X-Device-Id': this.deviceId },

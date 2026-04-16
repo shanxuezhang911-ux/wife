@@ -1,5 +1,5 @@
 server:
-  port: 8091
+  port: 9001
 
 spring:
   application:
@@ -48,9 +48,15 @@ rate-limit:
 cache:
   enabled: false
 
+# ==================== API加密 ====================
+security:
+  aes-key: "w1f3S3rv3r@2026!"
+  identity-app: "wife"
+  token-max-age-seconds: 300
+
 # ==================== GM管理 ====================
 gm:
-  port: 8092
+  port: 9002
   token: wife-gm-secret-2026
 
 # ==================== Voice (原有占位) ====================

@@ -1,7 +1,11 @@
 package com.wife.server.websocket;
 
 import com.wife.server.config.DoubaoConfig;
+import com.wife.server.config.SecurityConfig;
 import com.wife.server.service.RateLimitService;
+import com.wife.server.util.AesUtil;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.slf4j.Logger;
@@ -21,15 +25,19 @@ public class DoubaoProxyHandler extends AbstractWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(DoubaoProxyHandler.class);
 
+    private static final ObjectMapper mapper = new ObjectMapper();
+
     private final DoubaoConfig doubaoConfig;
     private final RateLimitService rateLimitService;
+    private final SecurityConfig securityConfig;
 
     // 每个客户端session对应一个豆包upstream连接
     private final Map<String, WebSocketClient> upstreamMap = new java.util.concurrent.ConcurrentHashMap<>();
 
-    public DoubaoProxyHandler(DoubaoConfig doubaoConfig, RateLimitService rateLimitService) {
+    public DoubaoProxyHandler(DoubaoConfig doubaoConfig, RateLimitService rateLimitService, SecurityConfig securityConfig) {
         this.doubaoConfig = doubaoConfig;
         this.rateLimitService = rateLimitService;
+        this.securityConfig = securityConfig;
     }
 
     @Override
@@ -38,6 +46,14 @@ public class DoubaoProxyHandler extends AbstractWebSocketHandler {
         String deviceId = getDeviceId(session);
 
         log.info("[代理] 新客户端连接 ip={}, deviceId={}", ip, deviceId);
+
+        // token校验
+        String token = getQueryParam(session, "token");
+        if (!validateWsToken(token)) {
+            log.warn("[代理] token校验失败 ip={}", ip);
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
 
         // 限流检查
         if (!rateLimitService.checkAndIncrement(ip, deviceId)) {
@@ -169,16 +185,38 @@ public class DoubaoProxyHandler extends AbstractWebSocketHandler {
     }
 
     private String getDeviceId(WebSocketSession session) {
-        // 从 query string 提取 deviceId
+        return getQueryParam(session, "deviceId") != null ? getQueryParam(session, "deviceId") : "unknown";
+    }
+
+    private String getQueryParam(WebSocketSession session, String name) {
         String query = session.getUri() != null ? session.getUri().getQuery() : null;
         if (query != null) {
             for (String param : query.split("&")) {
                 String[] kv = param.split("=", 2);
-                if (kv.length == 2 && "deviceId".equals(kv[0])) {
+                if (kv.length == 2 && name.equals(kv[0])) {
                     return kv[1];
                 }
             }
         }
-        return "unknown";
+        return null;
+    }
+
+    private boolean validateWsToken(String token) {
+        if (token == null || token.isEmpty()) return false;
+        try {
+            String json = AesUtil.decrypt(token, securityConfig.getAesKey());
+            JsonNode node = mapper.readTree(json);
+
+            String app = node.has("app") ? node.get("app").asText() : "";
+            long ts = node.has("ts") ? node.get("ts").asLong() : 0;
+
+            if (!securityConfig.getIdentityApp().equals(app)) return false;
+
+            long now = System.currentTimeMillis() / 1000;
+            return Math.abs(now - ts) <= securityConfig.getTokenMaxAgeSeconds();
+        } catch (Exception e) {
+            log.warn("[代理] WS token解析失败: {}", e.getMessage());
+            return false;
+        }
     }
 }
