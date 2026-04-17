@@ -12019,8 +12019,8 @@ exports.default = void 0;
 var SERVER_DOMAIN = 'www.zsx.asia';
 var _default = {
   // ==================== 服务器地址 ====================
-  API_BASE: "https://".concat(SERVER_DOMAIN, ":9001"),
-  WS_URL: "wss://".concat(SERVER_DOMAIN, ":9001/ws/doubao"),
+  API_BASE: "https://".concat(SERVER_DOMAIN),
+  WS_URL: "wss://".concat(SERVER_DOMAIN, "/ws/doubao"),
   // ==================== 音频配置（纯本地） ====================
   AUDIO: {
     INPUT_SAMPLE_RATE: 16000,

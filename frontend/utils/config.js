@@ -8,8 +8,8 @@ const SERVER_DOMAIN = 'www.zsx.asia'
 
 export default {
   // ==================== 服务器地址 ====================
-  API_BASE: `https://${SERVER_DOMAIN}:9001`,
-  WS_URL: `wss://${SERVER_DOMAIN}:9001/ws/doubao`,
+  API_BASE: `https://${SERVER_DOMAIN}`,
+  WS_URL: `wss://${SERVER_DOMAIN}/ws/doubao`,
 
   // ==================== 音频配置（纯本地） ====================
   AUDIO: {
